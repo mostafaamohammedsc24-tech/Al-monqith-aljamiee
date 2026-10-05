@@ -2,7 +2,7 @@ services:
   - type: web
     name: al-monqith-aljamiee
     runtime: node
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    buildCommand: pnpm install --frozen-lockfile && pnpm build
     startCommand: pnpm start
     healthCheckPath: /healthz
     envVars:
