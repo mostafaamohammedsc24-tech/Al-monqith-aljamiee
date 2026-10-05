@@ -1,0 +1,38 @@
+.admin-services{min-height:100vh;color:#1b3e5c;background:#f3f6f8}
+.admin-services>header{padding:22px max(24px,calc((100vw - 1120px)/2));display:flex;justify-content:space-between;align-items:center;gap:20px;background:#fff;border-bottom:1px solid #dce6eb}
+.admin-services>header>div>span,.admin-services-editor>div>span,.admin-services-list>div>span{color:#5c7d91;font-size:11px;font-weight:800}
+.admin-services>header h1{margin-top:4px;font-size:22px;font-weight:900}
+.admin-services nav{display:flex;flex-wrap:wrap;gap:6px}
+.admin-services nav button{padding:9px 11px;color:#527087;background:transparent;border:1px solid transparent;border-radius:6px;font-size:11px;font-weight:700}
+.admin-services nav button.active,.admin-services nav button:hover{color:#1b5d8e;background:#edf5fa;border-color:#d4e4ed}
+.admin-services>main{max-width:1120px;margin:0 auto;padding:28px 24px}
+.admin-services-editor,.admin-services-list{padding:22px;background:#fff;border:1px solid #dce5e9;border-radius:8px}
+.admin-services-editor h2,.admin-services-list h2{margin-top:4px;font-size:18px;font-weight:900}
+.admin-services-editor form{margin-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:12px 16px}
+.admin-services-editor label{display:grid;gap:6px;color:#486b83;font-size:11px;font-weight:700}
+.admin-services-editor input:not([type=checkbox]),.admin-services-editor textarea{width:100%;padding:10px 11px;color:#183b58;background:#fbfdfe;border:1px solid #d9e3e9;border-radius:6px;font:inherit}
+.admin-services-wide,.admin-services-actions{grid-column:1/-1}
+.admin-services-toggle{grid-template-columns:auto 1fr!important;align-items:center}
+.admin-services-actions{display:flex;gap:8px}
+.admin-services-actions button:not(.admin-services-primary){padding:9px 12px;background:#edf2f5;border-radius:6px;font-size:11px}
+.admin-services-primary{min-height:40px;padding:0 16px;color:#fff;background:#1c6294;border:0;border-radius:6px;font-size:11px;font-weight:800}
+.admin-services-primary:disabled{opacity:.55;cursor:wait}
+.admin-services-list{margin-top:18px}
+.admin-services-list>article{padding:16px 0;display:grid;grid-template-columns:minmax(180px,1fr) auto auto;align-items:center;gap:16px;border-bottom:1px solid #e3eaee}
+.admin-services-list>article small{color:#79909e;font-size:10px}
+.admin-services-list>article h3{margin:4px 0;font-size:14px;font-weight:800}
+.admin-services-list>article p{color:#6f8492;font-size:11px}
+.admin-services-list>article>strong{white-space:nowrap;font-size:13px}
+.admin-services-list>article>button{padding:8px 11px;color:#1b5d8e;background:#edf5fa;border-radius:6px;font-size:11px;font-weight:800}
+.admin-services-empty{padding:24px 0;color:#748a98;text-align:center}
+.admin-services-success,.admin-services-error{margin-top:12px;padding:10px 12px;border-radius:6px;font-size:11px}
+.admin-services-success{color:#286b4c;background:#ebf6ef}
+.admin-services-error{color:#a24343;background:#fff0ef}
+.admin-services-login{min-height:100vh;display:grid;place-items:center;padding:24px;background:#f3f6f8;color:#173b5e}
+.admin-services-login>form{width:min(100%,410px);padding:30px;background:#fff;border:1px solid #dce6eb;border-radius:10px}
+.admin-services-login>form>span{color:#598097;font-size:11px;font-weight:800}
+.admin-services-login h1{margin:7px 0 22px;font-size:24px;font-weight:900}
+.admin-services-login label{display:grid;gap:7px;margin:14px 0;color:#486b83;font-size:12px;font-weight:700}
+.admin-services-login input{padding:11px;border:1px solid #d9e3e9;border-radius:6px}
+.admin-services-back{position:absolute;top:22px;right:24px;padding:8px 10px;background:#fff;border:1px solid #d9e3e9;border-radius:6px;font-size:12px}
+@media(max-width:700px){.admin-services>header{align-items:flex-start;flex-direction:column}.admin-services>main{padding:18px 14px}.admin-services-editor,.admin-services-list{padding:16px}.admin-services-editor form{grid-template-columns:1fr}.admin-services-wide,.admin-services-actions{grid-column:1}.admin-services-list>article{grid-template-columns:1fr auto}.admin-services-list>article>strong{grid-column:1}.admin-services-list>article>button{grid-column:2;grid-row:1/3}}

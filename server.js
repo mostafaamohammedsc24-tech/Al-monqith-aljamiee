@@ -22,6 +22,20 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const adminLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+});
+
+const adminActionLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  standardHeaders: "draft-8",
+  legacyHeaders: false,
+});
+
 function configuredWooCommerce() {
   const baseUrl = process.env.WOOCOMMERCE_BASE_URL?.trim().replace(/\/+$/, "");
   const consumerKey = process.env.WOOCOMMERCE_CONSUMER_KEY?.trim();
@@ -53,21 +67,162 @@ function configuredSupabase() {
   return { baseUrl, anonKey };
 }
 
+function normalizeIraqiPhone(value) {
+  const digits = String(value ?? "").replace(/\D/g, "");
+  const normalized = digits.startsWith("00964") ? `+${digits.slice(2)}`
+    : digits.startsWith("964") ? `+${digits}`
+      : digits.startsWith("0") ? `+964${digits.slice(1)}`
+        : null;
+  return normalized && /^\+9647\d{9}$/.test(normalized) ? normalized : null;
+}
+
+function configuredAdminPhone() {
+  return normalizeIraqiPhone(process.env.ADMIN_PHONE);
+}
+
+async function getSupabaseUser(config, accessToken) {
+  try {
+    const result = await fetch(`${config.baseUrl}/auth/v1/user`, {
+      headers: { apikey: config.anonKey, Authorization: `Bearer ${accessToken}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    return result.ok ? result.json() : null;
+  } catch {
+    return null;
+  }
+}
+
 async function authenticatedSupabaseUser(request) {
   const config = configuredSupabase();
   const token = request.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
   if (!config || !token) return false;
+  return Boolean(await getSupabaseUser(config, token));
+}
+
+async function requireAdmin(request, response, next) {
+  const config = configuredSupabase();
+  const allowedPhone = configuredAdminPhone();
+  const token = request.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (!config || !allowedPhone) {
+    return response.status(503).json({ error: "Admin authentication is not configured on the server" });
+  }
+  if (!token) return response.status(401).json({ error: "تتطلب هذه العملية جلسة مشرف." });
+
+  const user = await getSupabaseUser(config, token);
+  if (!user) return response.status(401).json({ error: "انتهت جلسة المشرف." });
+  if (user.app_metadata?.role !== "admin" || normalizeIraqiPhone(user.phone) !== allowedPhone) {
+    return response.status(403).json({ error: "هذا الحساب لا يملك صلاحية الإدارة." });
+  }
+
+  request.adminSession = { config, token, user };
+  return next();
+}
+
+const serviceSelect = "id,title,description,category,base_price_iqd,duration_label,icon,color,features,variants,is_active,show_price,sort_order,created_at,updated_at";
+
+function validateServicePayload(body, partial = false) {
+  const fields = ["title", "description", "category", "base_price_iqd", "duration_label", "icon", "color", "features", "variants", "is_active", "show_price", "sort_order"];
+  const payload = {};
+  for (const field of fields) {
+    if (!(field in (body ?? {}))) continue;
+    payload[field] = body[field];
+  }
+
+  if (!partial && ["title", "description", "category", "base_price_iqd", "duration_label"].some((field) => !(field in payload))) {
+    return { error: "أكمل اسم الخدمة ووصفها وفئتها وسعرها ومدتها." };
+  }
+  if ("title" in payload && (typeof payload.title !== "string" || payload.title.trim().length < 2 || payload.title.length > 120)) return { error: "اسم الخدمة غير صالح." };
+  if ("description" in payload && (typeof payload.description !== "string" || payload.description.trim().length < 5 || payload.description.length > 2000)) return { error: "وصف الخدمة غير صالح." };
+  if ("category" in payload && (typeof payload.category !== "string" || payload.category.trim().length < 2 || payload.category.length > 80)) return { error: "فئة الخدمة غير صالحة." };
+  if ("base_price_iqd" in payload && (!Number.isSafeInteger(payload.base_price_iqd) || payload.base_price_iqd < 0)) return { error: "السعر يجب أن يكون عدداً صحيحاً غير سالب." };
+  if ("duration_label" in payload && (typeof payload.duration_label !== "string" || payload.duration_label.trim().length < 2 || payload.duration_label.length > 80)) return { error: "مدة التنفيذ غير صالحة." };
+  if ("icon" in payload && (typeof payload.icon !== "string" || payload.icon.length > 40)) return { error: "رمز الخدمة غير صالح." };
+  if ("color" in payload && (typeof payload.color !== "string" || payload.color.length > 40)) return { error: "لون الخدمة غير صالح." };
+  if ("features" in payload && (!Array.isArray(payload.features) || payload.features.length > 12 || payload.features.some((item) => typeof item !== "string" || item.length > 180))) return { error: "مزايا الخدمة غير صالحة." };
+  if ("variants" in payload && (!Array.isArray(payload.variants) || payload.variants.length > 8 || payload.variants.some((item) => typeof item !== "string" || item.length > 120))) return { error: "خيارات الخدمة غير صالحة." };
+  if ("is_active" in payload && typeof payload.is_active !== "boolean") return { error: "حالة النشر غير صالحة." };
+  if ("show_price" in payload && typeof payload.show_price !== "boolean") return { error: "إعداد عرض السعر غير صالح." };
+  if ("sort_order" in payload && (!Number.isSafeInteger(payload.sort_order) || payload.sort_order < 0 || payload.sort_order > 100000)) return { error: "ترتيب الخدمة غير صالح." };
+  return { payload: Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, typeof value === "string" ? value.trim() : value])) };
+}
+
+app.get("/api/services", async (_request, response) => {
+  const config = configuredSupabase();
+  if (!config) return response.status(503).json({ error: "Supabase is not configured" });
+  const query = new URLSearchParams({
+    select: serviceSelect,
+    is_active: "eq.true",
+    order: "sort_order.asc,created_at.desc",
+  });
 
   try {
-    const result = await fetch(`${config.baseUrl}/auth/v1/user`, {
+    const result = await fetch(`${config.baseUrl}/rest/v1/services?${query}`, {
+      headers: { apikey: config.anonKey },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!result.ok) return response.status(503).json({ error: "تعذر تحميل الخدمات المنشورة." });
+    return response.json({ services: await result.json() });
+  } catch {
+    return response.status(503).json({ error: "تعذر الاتصال بالخدمات." });
+  }
+});
+
+app.get("/api/admin/services", adminActionLimiter, requireAdmin, async (request, response) => {
+  const { config, token } = request.adminSession;
+  const query = new URLSearchParams({ select: serviceSelect, order: "sort_order.asc,created_at.desc", limit: "250" });
+  try {
+    const result = await fetch(`${config.baseUrl}/rest/v1/services?${query}`, {
       headers: { apikey: config.anonKey, Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(10000),
     });
-    return result.ok;
+    if (!result.ok) return response.status(503).json({ error: "تعذر تحميل الخدمات؛ تحقق من تطبيق ترحيل قاعدة البيانات." });
+    return response.json({ services: await result.json() });
   } catch {
-    return false;
+    return response.status(503).json({ error: "تعذر الاتصال بقاعدة البيانات." });
   }
-}
+});
+
+app.post("/api/admin/services", adminActionLimiter, requireAdmin, express.json({ limit: "24kb" }), async (request, response) => {
+  const { config, token } = request.adminSession;
+  const validated = validateServicePayload(request.body);
+  if (validated.error) return response.status(400).json({ error: validated.error });
+  try {
+    const result = await fetch(`${config.baseUrl}/rest/v1/services?select=${serviceSelect}`, {
+      method: "POST",
+      headers: { apikey: config.anonKey, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=representation" },
+      body: JSON.stringify(validated.payload),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!result.ok) return response.status(503).json({ error: "تعذر حفظ الخدمة؛ تحقق من ترحيل قاعدة البيانات." });
+    return response.status(201).json({ service: (await result.json())[0] });
+  } catch {
+    return response.status(503).json({ error: "تعذر الاتصال بقاعدة البيانات." });
+  }
+});
+
+app.patch("/api/admin/services/:serviceId", adminActionLimiter, requireAdmin, express.json({ limit: "24kb" }), async (request, response) => {
+  const { config, token } = request.adminSession;
+  const serviceId = request.params.serviceId;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(serviceId)) return response.status(400).json({ error: "معرّف الخدمة غير صالح." });
+  const validated = validateServicePayload(request.body, true);
+  if (validated.error) return response.status(400).json({ error: validated.error });
+  if (!Object.keys(validated.payload).length) return response.status(400).json({ error: "لا توجد تغييرات لحفظها." });
+  const query = new URLSearchParams({ id: `eq.${serviceId}`, select: serviceSelect });
+  try {
+    const result = await fetch(`${config.baseUrl}/rest/v1/services?${query}`, {
+      method: "PATCH",
+      headers: { apikey: config.anonKey, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=representation" },
+      body: JSON.stringify(validated.payload),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!result.ok) return response.status(503).json({ error: "تعذر تعديل الخدمة؛ تحقق من ترحيل قاعدة البيانات." });
+    const rows = await result.json();
+    if (!rows.length) return response.status(404).json({ error: "الخدمة غير موجودة." });
+    return response.json({ service: rows[0] });
+  } catch {
+    return response.status(503).json({ error: "تعذر الاتصال بقاعدة البيانات." });
+  }
+});
 
 function productMap() {
   try {
@@ -98,6 +253,109 @@ async function wooRequest(config, resource, options = {}) {
 }
 
 app.get("/healthz", (_request, response) => response.status(200).json({ status: "ok" }));
+
+app.post("/api/admin/login", adminLoginLimiter, express.json({ limit: "8kb" }), async (request, response) => {
+  const config = configuredSupabase();
+  const allowedPhone = configuredAdminPhone();
+  const phone = normalizeIraqiPhone(request.body?.phone);
+  const password = request.body?.password;
+
+  if (!config || !allowedPhone) {
+    return response.status(503).json({ error: "Admin authentication is not configured on the server" });
+  }
+  if (!phone || phone !== allowedPhone || typeof password !== "string" || password.length < 12 || password.length > 128) {
+    return response.status(401).json({ error: "بيانات دخول المشرف غير صحيحة." });
+  }
+
+  try {
+    const result = await fetch(`${config.baseUrl}/auth/v1/token?grant_type=password`, {
+      method: "POST",
+      headers: { apikey: config.anonKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ phone, password }),
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!result.ok) return response.status(401).json({ error: "بيانات دخول المشرف غير صحيحة." });
+
+    const session = await result.json();
+    const user = session.user;
+    if (user?.app_metadata?.role !== "admin" || normalizeIraqiPhone(user.phone) !== allowedPhone) {
+      return response.status(403).json({ error: "هذا الحساب لا يملك صلاحية الإدارة." });
+    }
+
+    return response.json({ accessToken: session.access_token, expiresIn: session.expires_in });
+  } catch {
+    return response.status(503).json({ error: "تعذر الاتصال بخدمة تسجيل الدخول." });
+  }
+});
+
+app.get("/api/admin/orders", adminActionLimiter, requireAdmin, async (request, response) => {
+  const { config, token } = request.adminSession;
+  const query = new URLSearchParams({
+    select: "id,order_number,service_title,total_iqd,status,payment_status,payment_method,payment_reference,paid_at,created_at",
+    payment_status: "eq.pending",
+    order: "created_at.desc",
+    limit: "100",
+  });
+
+  try {
+    const result = await fetch(`${config.baseUrl}/rest/v1/orders?${query}`, {
+      headers: { apikey: config.anonKey, Authorization: `Bearer ${token}` },
+      signal: AbortSignal.timeout(10000),
+    });
+    if (!result.ok) return response.status(503).json({ error: "تعذر تحميل الطلبات؛ تحقق من تطبيق ترحيل قاعدة البيانات." });
+    return response.json({ orders: await result.json() });
+  } catch {
+    return response.status(503).json({ error: "تعذر الاتصال بقاعدة البيانات." });
+  }
+});
+
+app.post("/api/admin/orders/:orderId/confirm-offline-payment", adminActionLimiter, requireAdmin, express.json({ limit: "8kb" }), async (request, response) => {
+  const { config, token } = request.adminSession;
+  const { orderId } = request.params;
+  const { method, reference, reason } = request.body ?? {};
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(orderId)) {
+    return response.status(400).json({ error: "رقم الطلب غير صالح." });
+  }
+  if (!new Set(["cash", "bank_transfer"]).has(method)) {
+    return response.status(400).json({ error: "طريقة القبض يجب أن تكون نقداً أو تحويلاً." });
+  }
+  if (typeof reason !== "string" || reason.trim().length < 5 || reason.length > 500) {
+    return response.status(400).json({ error: "أدخل سبباً واضحاً لتأكيد القبض." });
+  }
+  if (reference !== undefined && reference !== null && (typeof reference !== "string" || reference.length > 120)) {
+    return response.status(400).json({ error: "رقم الإيصال أو التحويل غير صالح." });
+  }
+
+  try {
+    const result = await fetch(`${config.baseUrl}/rest/v1/rpc/admin_confirm_offline_payment`, {
+      method: "POST",
+      headers: {
+        apikey: config.anonKey,
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        p_order_id: orderId,
+        p_method: method,
+        p_reference: typeof reference === "string" ? reference.trim() || null : null,
+        p_reason: reason.trim(),
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!result.ok) {
+      const error = await result.json().catch(() => ({}));
+      if (error.code === "P0002") return response.status(404).json({ error: "الطلب غير موجود." });
+      if (error.code === "P0001") return response.status(409).json({ error: "تم تأكيد دفع هذا الطلب مسبقاً أو لا يقبل الدفع." });
+      if (error.code === "42501") return response.status(403).json({ error: "ليس لديك صلاحية تأكيد الدفع." });
+      return response.status(503).json({ error: "تعذر حفظ تأكيد الدفع؛ تحقق من ترحيل قاعدة البيانات." });
+    }
+
+    return response.json({ confirmation: await result.json() });
+  } catch {
+    return response.status(503).json({ error: "تعذر الاتصال بقاعدة البيانات." });
+  }
+});
 
 app.post("/api/payments/wayl/checkout", apiLimiter, express.json({ limit: "16kb" }), async (request, response) => {
   if (!configuredSupabase()) {

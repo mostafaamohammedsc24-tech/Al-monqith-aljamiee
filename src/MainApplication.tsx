@@ -1,12 +1,14 @@
 // @refresh reset
 import { FormEvent, lazy, ReactNode, Suspense, useEffect, useMemo, useState } from "react";
-import { catalogCategories, catalogServices, CatalogService } from "./catalog";
+import { catalogCategories, catalogServices, CatalogService } from "./catalog-data";
 import "./market-share.css";
 import type { TemplateChoice } from "./TemplatesPage";
 
 const AdminLatexPage = lazy(() => import("./AdminLatexPage"));
 const TemplatesPage = lazy(() => import("./TemplatesPage"));
 const AdminDiscountsPage = lazy(() => import("./AdminDiscountsPage"));
+const AdminPaymentsPage = lazy(() => import("./AdminPaymentsPage"));
+const AdminServicesPage = lazy(() => import("./AdminServicesPage"));
 
 type IconName =
   | "arrow"
@@ -207,6 +209,7 @@ function Icon({
 
 type Service = {
   id: number;
+  category: string;
   title: string;
   description: string;
   price: string;
@@ -214,6 +217,7 @@ type Service = {
   icon: IconName;
   color: string;
   popular?: boolean;
+  showPrice: boolean;
   features: string[];
   templates?: { name: string; style: string; description: string }[];
   variants?: string[];
@@ -224,70 +228,6 @@ type AppliedCoupon = {
   type: "fixed" | "percentage";
   value: number;
 };
-
-const services: Service[] = [
-  {
-    id: 1,
-    title: "إعداد التقارير الجامعية",
-    description: "تقارير أكاديمية منظمة، موثقة ومصممة وفق متطلبات جامعتك.",
-    price: "15,000",
-    duration: "2–4 أيام",
-    icon: "file" as IconName,
-    color: "mint",
-    popular: true,
-    features: ["صياغة أكاديمية متخصصة", "توثيق المصادر والمراجع", "تنسيق احترافي جاهز للطباعة"],
-  },
-  {
-    id: 2,
-    title: "العروض التقديمية",
-    description: "عروض جذابة ومختصرة تساعدك على تقديم أفكارك بثقة ووضوح.",
-    price: "12,000",
-    duration: "1–3 أيام",
-    icon: "presentation" as IconName,
-    color: "blue",
-    features: ["تصميم بصري جذاب", "تلخيص دقيق للمحتوى", "ملف PowerPoint قابل للتعديل"],
-  },
-  {
-    id: 3,
-    title: "البحوث الأكاديمية",
-    description: "مساعدة بحثية متكاملة من اختيار الموضوع وحتى قائمة المراجع.",
-    price: "35,000",
-    duration: "5–7 أيام",
-    icon: "book" as IconName,
-    color: "purple",
-    features: ["خطة بحث واضحة", "مصادر أكاديمية موثوقة", "مراجعتان مجانيتان"],
-  },
-  {
-    id: 4,
-    title: "التصاميم الجامعية",
-    description: "بوسترات، أغلفة ومخططات بصرية تعكس محتواك بشكل احترافي.",
-    price: "10,000",
-    duration: "1–2 يوم",
-    icon: "palette" as IconName,
-    color: "orange",
-    features: ["تصميم حسب الهوية المطلوبة", "دقة عالية للطباعة", "تسليم بعدة صيغ"],
-  },
-  {
-    id: 5,
-    title: "التدقيق والتنسيق",
-    description: "مراجعة لغوية وتنسيق شامل للبحوث والتقارير والمشاريع.",
-    price: "8,000",
-    duration: "1–2 يوم",
-    icon: "pen" as IconName,
-    color: "rose",
-    features: ["تدقيق لغوي وإملائي", "تنسيق العناوين والفهارس", "مطابقة دليل الجامعة"],
-  },
-  {
-    id: 6,
-    title: "تلخيص المحاضرات",
-    description: "ملخصات ذكية ومركزة تجعل المراجعة أسرع وأكثر فاعلية.",
-    price: "7,000",
-    duration: "1–2 يوم",
-    icon: "sparkles" as IconName,
-    color: "yellow",
-    features: ["أبرز الأفكار والمفاهيم", "تنظيم سهل للمراجعة", "إمكانية إضافة أسئلة"],
-  },
-];
 
 type MarketListing = {
   id: string;
@@ -304,17 +244,6 @@ type MarketListing = {
   createdAt: string;
   mediaUrl?: string;
 };
-
-const initialMarketItems: MarketListing[] = [
-  { id: "M-101", title: "حاسبة كاسيو علمية", price: 25000, tag: "مستعمل كالجديد", style: "calculator", category: "أجهزة وتقنية", kind: "منتج", mediaType: "صورة", description: "حاسبة علمية أصلية بحالة ممتازة مع الغلاف.", location: "جامعة بغداد", seller: "سارة أحمد", createdAt: "اليوم" },
-  { id: "M-102", title: "مجموعة كتب طب – مرحلة ثانية", price: 45000, tag: "6 كتب", style: "books", category: "كتب وملخصات", kind: "منتج", mediaType: "صورة", description: "مجموعة كاملة ونظيفة لطلبة المرحلة الثانية.", location: "الجامعة المستنصرية", seller: "علي كريم", createdAt: "اليوم" },
-  { id: "M-103", title: "معطف مختبر أبيض", price: 18000, tag: "قياس L", style: "coat", category: "مختبر وهندسة", kind: "منتج", mediaType: "صورة", description: "معطف مختبر قليل الاستخدام ونظيف.", location: "جامعة النهرين", seller: "نور حسين", createdAt: "أمس" },
-  { id: "M-104", title: "شرح خصوصي لمادة الإحصاء", price: 12000, tag: "للساعة", style: "service", category: "خدمات طلابية", kind: "خدمة", mediaType: "فيديو", description: "شرح مبسط وحل تمارين تدريبية لطلبة المراحل الأولى.", location: "عن بُعد", seller: "محمد قاسم", createdAt: "اليوم" },
-  { id: "M-105", title: "بوكس كوكيز منزلي", price: 15000, tag: "6 قطع", style: "food", category: "طعام ومشروبات", kind: "منتج", mediaType: "فيديو", description: "كوكيز طازج من مشروع طالبة، مع خيارات شوكولاتة وحشوات متنوعة.", location: "جامعة بغداد", seller: "مريم سالم", createdAt: "اليوم" },
-  { id: "M-106", title: "مجموعة عناية طبيعية", price: 22000, tag: "صناعة يدوية", style: "beauty", category: "مكياج وعناية", kind: "منتج", mediaType: "صورة", description: "مجموعة عناية مصنوعة يدويًا بمكونات موضحة وتغليف مناسب للهدايا.", location: "الجامعة المستنصرية", seller: "زهراء علي", createdAt: "اليوم" },
-  { id: "M-107", title: "حقائب قماش مطرزة", price: 18000, tag: "حسب الطلب", style: "fashion", category: "أزياء وإكسسوارات", kind: "منتج", mediaType: "صورة", description: "تصاميم طلابية مطرزة يدويًا مع إمكانية كتابة الاسم أو العبارة.", location: "جامعة الكوفة", seller: "آية حسن", createdAt: "أمس" },
-  { id: "M-108", title: "تصميم محتوى للمشاريع الصغيرة", price: 10000, tag: "يبدأ من", style: "creative", category: "خدمات رقمية", kind: "خدمة", mediaType: "فيديو", description: "تصميم منشورات وقصص وهوية بسيطة لمشاريع الطلبة الناشئة.", location: "عن بُعد", seller: "حيدر ياسر", createdAt: "اليوم" },
-];
 
 const marketCategories = [
   "الكل",
@@ -607,43 +536,26 @@ const speedOptions = [
   { id: "urgent", label: "مستعجل جداً", detail: "خلال 24 ساعة", extra: 10000 },
 ];
 
-const serviceTemplates: Record<string, { name: string; style: string; description: string }[]> = {
-  "تقارير": [
-    { name: "أكاديمي كلاسيكي", style: "t1", description: "هوامش رسمية وعناوين واضحة" },
-    { name: "بحث حديث", style: "t2", description: "تخطيط نظيف مع إبراز البيانات" },
-    { name: "رسمي داكن", style: "t3", description: "هوية قوية للمشاريع المتقدمة" },
-  ],
-  "عروض": [
-    { name: "عرض Minimal", style: "t2", description: "مساحات هادئة ومحتوى مركز" },
-    { name: "عرض بصري", style: "t4", description: "صور ورسوم وبيانات بارزة" },
-    { name: "عرض المناقشة", style: "t3", description: "مهيأ للمشاريع واللجان" },
-  ],
-  "تصاميم": [
-    { name: "هندسي شبكي", style: "t5", description: "تكوين منظم وحديث" },
-    { name: "علمي نظيف", style: "t2", description: "ألوان هادئة ووضوح عالٍ" },
-    { name: "إبداعي ملون", style: "t4", description: "طابع شبابي ملفت" },
-  ],
-  "سيرة مهنية": [
-    { name: "مهني ATS", style: "t1", description: "مهيأ لأنظمة التوظيف" },
-    { name: "حديث بعمودين", style: "t2", description: "ملائم للطلاب والخريجين" },
-    { name: "Portfolio بصري", style: "t4", description: "للتخصصات الإبداعية" },
-  ],
-  "وثائق": [
-    { name: "نموذج رسمي", style: "t1", description: "متوافق مع المعاملات" },
-    { name: "نموذج مبسط", style: "t2", description: "سهل القراءة والتعبئة" },
-    { name: "أرشفة رقمية", style: "t5", description: "منظم للحفظ والاسترجاع" },
-  ],
-  "تقنية": [
-    { name: "واجهة لوحة تحكم", style: "t5", description: "للأنظمة الإدارية" },
-    { name: "واجهة طلابية", style: "t2", description: "خفيفة وسهلة الاستخدام" },
-    { name: "بوابة مؤسسة", style: "t3", description: "هوية رسمية متكاملة" },
-  ],
-};
-
 const formatPrice = (value: number) => new Intl.NumberFormat("ar-IQ").format(value);
 
+type AppPage = "home" | "market" | "profile" | "templates" | "admin-login" | "admin-payments" | "admin-services" | "admin-latex" | "admin-discounts";
+
+function pageFromPath(pathname: string): AppPage {
+  if (pathname.startsWith("/admin/discounts")) return "admin-discounts";
+  if (pathname.startsWith("/admin/latex")) return "admin-latex";
+  if (pathname.startsWith("/admin/payments")) return "admin-payments";
+  if (pathname.startsWith("/admin/services")) return "admin-services";
+  if (pathname.startsWith("/admin/login")) return "admin-login";
+  if (pathname.startsWith("/templates")) return "templates";
+  if (pathname.startsWith("/market")) return "market";
+  if (pathname.startsWith("/profile")) return "profile";
+  return "home";
+}
+
 export default function App() {
-  const [page, setPage] = useState<"home" | "market" | "profile" | "templates" | "admin-latex" | "admin-discounts">(() => window.location.pathname.startsWith("/admin/discounts") ? "admin-discounts" : window.location.pathname.startsWith("/admin/latex") ? "admin-latex" : window.location.pathname.startsWith("/templates") ? "templates" : window.location.pathname.startsWith("/market") ? "market" : window.location.pathname.startsWith("/profile") ? "profile" : "home");
+  const [page, setPage] = useState<AppPage>(() => pageFromPath(window.location.pathname));
+  const [services, setServices] = useState<Service[]>([]);
+  const [servicesLoadError, setServicesLoadError] = useState("");
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [orderStep, setOrderStep] = useState<"details" | "form" | "success">("details");
   const [activeCategory, setActiveCategory] = useState("الكل");
@@ -666,7 +578,7 @@ export default function App() {
     }
   });
   const accountStorageId = profile?.phone.replace(/\D/g, "") || "guest";
-  const [points, setPoints] = useState(() => Number(localStorage.getItem(`najda-points-${accountStorageId}`) || localStorage.getItem("najda-points") || 240));
+  const [points, setPoints] = useState(() => Number(localStorage.getItem(`najda-points-${accountStorageId}`) || localStorage.getItem("najda-points") || 0));
   const [dailyClaimed, setDailyClaimed] = useState(
     () => localStorage.getItem(`najda-daily-claim-${accountStorageId}`) === new Date().toISOString().slice(0, 10),
   );
@@ -675,20 +587,13 @@ export default function App() {
   const [authMode, setAuthMode] = useState<"register" | "login">("register");
   const [authError, setAuthError] = useState("");
   const [listingOpen, setListingOpen] = useState(false);
-  const [listingSent, setListingSent] = useState(false);
+  const [listingError, setListingError] = useState("");
   const [listingMode, setListingMode] = useState<"منتج" | "خدمة" | "ريل">("منتج");
   const [listingMediaName, setListingMediaName] = useState("");
   const [marketQuery, setMarketQuery] = useState("");
   const [marketCategory, setMarketCategory] = useState("الكل");
   const [marketKind, setMarketKind] = useState("الكل");
-  const [marketListings, setMarketListings] = useState<MarketListing[]>(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem("najda-market-listings") || "[]") as MarketListing[];
-      return [...saved, ...initialMarketItems];
-    } catch {
-      return initialMarketItems;
-    }
-  });
+  const [marketListings, setMarketListings] = useState<MarketListing[]>([]);
   const [purchaseItem, setPurchaseItem] = useState<MarketListing | null>(null);
   const [shareItem, setShareItem] = useState<MarketListing | null>(null);
   const [productDetail, setProductDetail] = useState<MarketListing | null>(null);
@@ -703,13 +608,40 @@ export default function App() {
     }
   });
 
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/services")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("تعذر تحميل الخدمات المنشورة.");
+        return response.json() as Promise<{ services?: Array<{ title: string; category: string; description: string; base_price_iqd: number; duration_label: string; icon: string; color: string; features: string[]; variants: string[]; show_price: boolean }> }>;
+      })
+      .then((result) => {
+        if (cancelled) return;
+        setServices((result.services || []).map((service, index) => ({
+          id: index + 1,
+          category: service.category,
+          title: service.title,
+          description: service.description,
+          price: String(service.base_price_iqd),
+          duration: service.duration_label,
+          icon: service.icon as IconName,
+          color: service.color,
+          features: service.features || [],
+          variants: service.variants || [],
+          showPrice: service.show_price,
+        })));
+        setServicesLoadError("");
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setServicesLoadError(error instanceof Error ? error.message : "تعذر تحميل الخدمات.");
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  const serviceCategories = ["الكل", ...new Set(services.map((service) => service.category))];
   const visibleServices = useMemo(() => {
-    if (activeCategory === "العروض") return services.filter((service) => service.id === 2);
-    if (activeCategory === "البحوث والتقارير") return services.filter((service) => [1, 3].includes(service.id));
-    if (activeCategory === "التصميم") return services.filter((service) => service.id === 4);
-    if (activeCategory === "خدمات مساندة") return services.filter((service) => [5, 6].includes(service.id));
-    return services;
-  }, [activeCategory]);
+    return activeCategory === "الكل" ? services : services.filter((service) => service.category === activeCategory);
+  }, [activeCategory, services]);
 
   const filteredCatalog = useMemo(() => {
     const normalizedQuery = catalogQuery.trim().toLocaleLowerCase("ar");
@@ -829,7 +761,7 @@ export default function App() {
 
   useEffect(() => {
     const handlePopState = () => {
-      setPage(window.location.pathname.startsWith("/admin/discounts") ? "admin-discounts" : window.location.pathname.startsWith("/admin/latex") ? "admin-latex" : window.location.pathname.startsWith("/templates") ? "templates" : window.location.pathname.startsWith("/market") ? "market" : window.location.pathname.startsWith("/profile") ? "profile" : "home");
+      setPage(pageFromPath(window.location.pathname));
       if (!window.location.pathname.startsWith("/market/product/")) setProductDetail(null);
       window.scrollTo({ top: 0, behavior: "auto" });
     };
@@ -867,6 +799,24 @@ export default function App() {
   function navigateToAdminDiscounts() {
     window.history.pushState({}, "", "/admin/discounts");
     setPage("admin-discounts");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function navigateToAdminLogin() {
+    window.history.pushState({}, "", "/admin/login");
+    setAuthOpen(false);
+    setPage("admin-login");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function navigateToAdminDashboard() {
+    window.history.replaceState({}, "", "/admin/payments");
+    setPage("admin-payments");
+  }
+
+  function navigateToAdminServices() {
+    window.history.pushState({}, "", "/admin/services");
+    setPage("admin-services");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -943,11 +893,10 @@ export default function App() {
   }
 
   function openService(service: Service) {
-    const featuredTemplateGroup = service.icon === "presentation" ? "عروض" : service.icon === "palette" ? "تصاميم" : "تقارير";
     setSelectedService({
       ...service,
-      templates: service.templates || (service.id < 1000 ? serviceTemplates[featuredTemplateGroup] : undefined),
-      variants: service.variants || ["الخدمة الأساسية", "خدمة موسعة", "تنفيذ مخصص"],
+      templates: service.templates,
+      variants: service.variants || [],
     });
     setOrderStep("details");
     setSpeed("normal");
@@ -964,18 +913,20 @@ export default function App() {
     const colors = ["mint", "blue", "purple", "orange", "rose", "yellow"];
     openService({
       id: service.id + 1000,
+      category: service.category,
       title: service.title,
       description: service.description,
       price: formatPrice(service.price),
       duration: service.duration,
       icon: icons[categoryIndex] || "file",
       color: colors[categoryIndex % colors.length],
+      showPrice: true,
       features: [
         `التسليم: ${service.delivery}`,
         `التنفيذ بواسطة: ${service.provider}`,
         "متابعة وتعديلات وفق المتطلبات",
       ],
-      templates: service.templateGroup ? serviceTemplates[service.templateGroup] : undefined,
+      templates: undefined,
       variants: service.variants,
     });
   }
@@ -1039,22 +990,9 @@ export default function App() {
     event.preventDefault();
     if (!selectedService) return;
     const data = new FormData(event.currentTarget);
-    const orderId = `MU-${Date.now().toString().slice(-6)}`;
     const selectedSpeed = speedOptions.find((option) => option.id === speed);
-    const newOrder: SavedOrder = {
-      id: orderId,
-      service: selectedService.title,
-      date: new Date().toLocaleDateString("ar-IQ"),
-      total: orderPrice.total,
-      status: "بانتظار التدقيق",
-    };
-    const nextOrders = [newOrder, ...orders];
-    setOrders(nextOrders);
-    localStorage.setItem("najda-orders", JSON.stringify(nextOrders));
-    if (usePoints) setPoints((current) => current - Math.floor(current / 100) * 100);
     const message = [
       "مرحباً، أود تثبيت طلب جديد عبر المنقذ الجامعي",
-      `رقم الطلب: ${orderId}`,
       `الخدمة: ${selectedService.title}`,
       `الاسم الثلاثي: ${data.get("fullName")}`,
       `رقم التواصل: ${data.get("phone")}`,
@@ -1073,7 +1011,7 @@ export default function App() {
       `السعر التقديري: ${formatPrice(orderPrice.total)} د.ع`,
       "الاستنساخ والتوصيل إلى الجامعة: مجاناً",
       "",
-      "سأرسل الملفات المطلوبة في هذه المحادثة لتدقيق الطلب.",
+      "هذا استفسار عبر واتساب ولم يُسجل كطلب في النظام بعد.",
     ].join("\n");
     setOrderStep("success");
     window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
@@ -1131,52 +1069,15 @@ export default function App() {
 
   function openListingComposer(mode: "منتج" | "خدمة" | "ريل") {
     setListingMode(mode);
-    setListingSent(false);
+    setListingError("");
+    setListingError("");
     setListingMediaName("");
     setListingOpen(true);
   }
 
   function submitListing(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const category = String(data.get("category") || "أخرى");
-    const kind = listingMode === "خدمة" ? "خدمة" : String(data.get("kind") || "منتج") as "منتج" | "خدمة";
-    const media = data.get("media");
-    const mediaType: MarketListing["mediaType"] =
-      listingMode === "ريل" || (media instanceof File && media.type.startsWith("video/")) ? "فيديو" : "صورة";
-    const styleMap: Record<string, string> = {
-      "كتب وملخصات": "books",
-      "أجهزة وتقنية": "calculator",
-      "مختبر وهندسة": "coat",
-      "سكن ونقل": "housing",
-      "خدمات طلابية": "service",
-      "طعام ومشروبات": "food",
-      "مكياج وعناية": "beauty",
-      "أزياء وإكسسوارات": "fashion",
-      "هدايا وأعمال يدوية": "handmade",
-      "خدمات رقمية": "creative",
-      "تصوير ومونتاج": "creative",
-      "أخرى": "general",
-    };
-    const listing: MarketListing = {
-      id: `M-${Date.now().toString().slice(-6)}`,
-      title: String(data.get("title")),
-      price: Number(String(data.get("price")).replace(/,/g, "")),
-      tag: kind === "خدمة" ? String(data.get("pricingUnit") || "سعر الخدمة") : String(data.get("condition") || "معروض للبيع"),
-      style: styleMap[category] || "general",
-      category,
-      kind,
-      mediaType,
-      description: String(data.get("description") || "إعلان جديد في سوق الجامعة."),
-      location: String(data.get("location") || profile?.university || "العراق"),
-      seller: profile?.fullName || "طالب جامعي",
-      createdAt: "الآن",
-      mediaUrl: media instanceof File ? URL.createObjectURL(media) : undefined,
-    };
-    const customListings = [listing, ...marketListings.filter((item) => !item.id.startsWith("M-10"))];
-    localStorage.setItem("najda-market-listings", JSON.stringify(customListings.map(({ mediaUrl: _mediaUrl, ...item }) => item)));
-    setMarketListings([listing, ...marketListings]);
-    setListingSent(true);
+    setListingError("نشر الإعلانات غير متاح حتى يكتمل ربط قاعدة بيانات السوق والتخزين.");
   }
 
   async function startWaylCheckout(event: FormEvent<HTMLFormElement>) {
@@ -1245,6 +1146,14 @@ export default function App() {
       ) : page === "templates" ? (
         <Suspense fallback={<div className="route-loader" role="status"><span /><strong>جارٍ تحميل مكتبة القوالب...</strong><small>نجهز المعاينات والفئات</small></div>}>
           <TemplatesPage onBack={navigateHome} onSelect={selectTemplate} />
+        </Suspense>
+      ) : page === "admin-services" ? (
+        <Suspense fallback={<div className="route-loader" role="status"><span /><strong>جارٍ تحميل إدارة الخدمات...</strong></div>}>
+          <AdminServicesPage onBack={navigateHome} onPayments={navigateToAdminDashboard} onDiscounts={navigateToAdminDiscounts} onLatex={navigateToAdminLatex} />
+        </Suspense>
+      ) : page === "admin-login" || page === "admin-payments" ? (
+        <Suspense fallback={<div className="route-loader" role="status"><span /><strong>جارٍ تحميل لوحة المشرف...</strong></div>}>
+          <AdminPaymentsPage onBack={navigateHome} onDashboard={navigateToAdminDashboard} onServices={navigateToAdminServices} onDiscounts={navigateToAdminDiscounts} onLatex={navigateToAdminLatex} />
         </Suspense>
       ) : page === "admin-discounts" ? (
         <Suspense fallback={<div className="route-loader" role="status"><span /><strong>جارٍ تحميل إدارة الخصومات...</strong></div>}>
@@ -1327,26 +1236,9 @@ export default function App() {
                   <div className="pencil"><span /></div>
                 </div>
               </div>
-              <div className="floating-card fc-one"><span className="float-icon green"><Icon name="check" size={18} /></span><span><strong>تم إنجاز طلبك</strong><small>بأعلى جودة</small></span></div>
-              <div className="floating-card fc-two"><span className="float-icon gold"><Icon name="star" size={18} /></span><span><strong>+2,500</strong><small>طالب سعيد</small></span></div>
               <div className="decor-star star-one">✦</div>
               <div className="decor-star star-two">✦</div>
             </div>
-          </div>
-        </section>
-
-        <section className="stats-bar">
-          <div className="mx-auto grid max-w-[1000px] grid-cols-2 px-5 py-7 md:grid-cols-4">
-            {[
-              ["+2,500", "طالب وثق بنا"],
-              ["+4,800", "طلب مكتمل"],
-              ["4.9/5", "تقييم الخدمة"],
-              ["24/7", "دعم ومتابعة"],
-            ].map(([value, label], index) => (
-              <div className={`stat ${index > 0 ? "md:border-r" : ""}`} key={label}>
-                <strong>{value}</strong><span>{label}</span>
-              </div>
-            ))}
           </div>
         </section>
 
@@ -1357,7 +1249,7 @@ export default function App() {
               <a href="#catalog" className="see-all">عرض جميع الخدمات <Icon name="arrow" size={17} /></a>
             </div>
             <div className="category-tabs">
-              {["الكل", "البحوث والتقارير", "العروض", "التصميم", "خدمات مساندة"].map((category) => (
+              {serviceCategories.map((category) => (
                 <button className={activeCategory === category ? "active" : ""} key={category} onClick={() => setActiveCategory(category)}>{category}</button>
               ))}
             </div>
@@ -1370,11 +1262,12 @@ export default function App() {
                   <p>{service.description}</p>
                   <div className="service-meta"><span><Icon name="clock" size={15} /> {service.duration}</span></div>
                   <div className="service-footer">
-                    <span><small>تبدأ من</small><strong>{service.price} <i>د.ع</i></strong></span>
+                    <span><small>{service.showPrice ? "تبدأ من" : "السعر"}</small><strong>{service.showPrice ? `${formatPrice(Number(service.price))} د.ع` : "يحدد بعد المراجعة"}</strong></span>
                     <span className="card-arrow"><Icon name="arrow" size={19} /></span>
                   </div>
                 </button>
               ))}
+              {!visibleServices.length && <div className="catalog-empty md:col-span-2 lg:col-span-3"><Icon name="file" size={28} /><h3>{servicesLoadError ? "تعذر تحميل الخدمات" : "لا توجد خدمات منشورة بعد"}</h3><p>{servicesLoadError || "سيضيف المشرف الخدمات وأسعارها من لوحة الإدارة."}</p></div>}
             </div>
           </div>
         </section>
@@ -1382,7 +1275,7 @@ export default function App() {
         <section className="catalog-section" id="catalog">
           <div className="mx-auto max-w-[1180px] px-5 py-20 lg:px-8">
             <div className="catalog-intro">
-              <div><span className="section-kicker">دليل المنقذ الجامعي</span><h2>ابحث بين أكثر من 350 خدمة</h2><p>من أبسط مهمة يومية إلى المشاريع الجامعية المتقدمة، ابحث باسم الخدمة أو اختر مجالاً.</p></div>
+              <div><span className="section-kicker">دليل المنقذ الجامعي</span><h2>الخدمات المنشورة</h2><p>تظهر هنا الخدمات التي أضافها المشرف واعتمد أسعارها.</p></div>
               <div className="catalog-count"><strong>{catalogServices.length}</strong><span>خدمة متاحة</span></div>
             </div>
             <div className="catalog-search">
@@ -1460,25 +1353,10 @@ export default function App() {
         <section className="section templates-section" id="templates">
           <div className="mx-auto max-w-[1180px] px-5 lg:px-8">
             <div className="section-heading">
-              <div><span className="section-kicker">مكتبة القوالب</span><h2>شاهد النتيجة قبل أن تختار</h2><p>قوالب مصممة بعناية للتقارير والعروض والبوسترات، ويمكن تخصيصها بالكامل.</p></div>
+              <div><span className="section-kicker">مكتبة القوالب</span><h2>القوالب المنشورة</h2><p>تظهر هنا القوالب المتاحة فعلياً في المكتبة.</p></div>
               <button className="see-all" onClick={navigateToTemplates}>استعراض المكتبة <Icon name="arrow" size={17} /></button>
             </div>
-            <div className="template-showcase">
-              {[
-                ["عرض تقديمي", "تقنية المستقبل", "deck-one", "16 شريحة"],
-                ["تقرير جامعي", "البحث الأكاديمي", "deck-two", "قالب رسمي"],
-                ["بوستر علمي", "مشروع التخرج", "deck-three", "A1 للطباعة"],
-                ["عرض تقديمي", "إدارة الأعمال", "deck-four", "24 شريحة"],
-              ].map(([type, title, style, meta], index) => (
-                <button className="showcase-card" key={title} onClick={navigateToTemplates}>
-                  <span className={`showcase-preview ${style}`}>
-                    <i className="preview-number">0{index + 1}</i>
-                    <b>{title}</b><em /><em /><span>{meta}</span>
-                  </span>
-                  <span className="showcase-info"><span><small>{type}</small><strong>{title}</strong></span><i><Icon name="arrow" size={17} /></i></span>
-                </button>
-              ))}
-            </div>
+            <div className="templates-empty"><span><Icon name="file" size={24} /></span><h3>لا توجد قوالب منشورة بعد</h3><p>ستظهر القوالب هنا بعد إضافتها إلى المكتبة.</p></div>
           </div>
         </section>
 
@@ -1521,15 +1399,11 @@ export default function App() {
             {marketItems.length === 0 && <div className="market-empty"><Icon name="search" size={28} /><h3>لا توجد إعلانات مطابقة</h3><p>غيّر الفئة أو انشر طلبك ليشاهده مجتمع الجامعة.</p><button onClick={() => openListingComposer("منتج")}>أضف أول إعلان</button></div>}
             <div className="reels-heading"><div><span className="section-kicker">فيديوهات السوق</span><h3>شاهد المنتج أو الخدمة كما هي</h3></div><button onClick={() => openListingComposer("ريل")}><Icon name="plus" size={15} /> نشر ريل</button></div>
             <div className="reels-row">
-              {[...marketReels.map((item, index) => ({ title: item.title, views: item.createdAt === "الآن" ? "جديد الآن" : "مشاهدة الإعلان", style: ["reel-green", "reel-blue", "reel-orange", "reel-purple"][index % 4], mediaUrl: item.mediaUrl })), ...[
-                { title: "جولة في كتب الهندسة", views: "1.2 ألف مشاهدة", style: "reel-green" },
-                { title: "آيباد للدراسة والرسم", views: "860 مشاهدة", style: "reel-blue" },
-                { title: "أدوات الرسم المعماري", views: "2.1 ألف مشاهدة", style: "reel-orange" },
-              ]].map(({ title, views, style, mediaUrl }, index) => (
-                <button className={`reel-card ${style}`} key={`${title}-${index}`}>
-                  {mediaUrl && <video className="reel-video" src={mediaUrl} muted preload="metadata" playsInline />}
+              {marketReels.map((reel, index) => (
+                <button className={`reel-card ${reel.style}`} key={`${reel.title}-${index}`}>
+                  {"mediaUrl" in reel && reel.mediaUrl && <video className="reel-video" src={reel.mediaUrl} muted preload="metadata" playsInline />}
                   <span className="reel-play"><Icon name="play" size={20} /></span>
-                  <span className="reel-overlay"><strong>{title}</strong><small>{views}</small></span>
+                  <span className="reel-overlay"><strong>{reel.title}</strong><small>{reel.createdAt}</small></span>
                 </button>
               ))}
             </div>
@@ -1548,7 +1422,7 @@ export default function App() {
         <div className="mx-auto grid max-w-[1180px] gap-10 px-5 py-12 md:grid-cols-[1.3fr_.7fr_.7fr_1fr] lg:px-8">
           <div><div className="flex items-center gap-3"><span className="logo-mark inverse"><Icon name="book" size={22} /></span><strong className="text-xl">المنقذ الجامعي</strong></div><p className="mt-4 max-w-sm text-sm leading-7 text-[#a9bac9]">رفيق الطالب العراقي للخدمات الأكاديمية والاحتياجات الجامعية، بجودة تستحق ثقتك.</p></div>
           <div><h4>روابط سريعة</h4><a href="#services">الخدمات</a><a href="#market">سوق الجامعة</a><a href="#why">كيف نعمل؟</a></div>
-          <div><h4>المساعدة</h4><a href="#">الأسئلة الشائعة</a><a href="#">سياسة الخصوصية</a><a href="#">الشروط والأحكام</a><a href="/admin/discounts" onClick={(event) => { event.preventDefault(); navigateToAdminDiscounts(); }}>دخول المشرفين</a></div>
+          <div><h4>المساعدة</h4><a href="#">الأسئلة الشائعة</a><a href="#">سياسة الخصوصية</a><a href="#">الشروط والأحكام</a><a href="/admin/login" onClick={(event) => { event.preventDefault(); navigateToAdminLogin(); }}>دخول المشرفين</a></div>
           <div><h4>ابقَ على تواصل</h4><p className="text-sm leading-7 text-[#a9bac9]">أرسل استفسارك وسنجيبك بأقرب وقت.</p><a className="footer-contact" href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent("مرحباً، أحتاج مساعدة من فريق المنقذ الجامعي")}`} target="_blank" rel="noreferrer"><Icon name="phone" size={18} /> تواصل عبر واتساب</a></div>
         </div>
         <div className="border-t border-white/10 py-5 text-center text-xs text-[#7890a5]">جميع الحقوق محفوظة © 2025 المنقذ الجامعي</div>
@@ -1661,7 +1535,7 @@ export default function App() {
               </form>
             )}
             {orderStep === "success" && (
-              <div className="success-state"><span><Icon name="check" size={38} /></span><h2>تم حفظ الطلب وفتح واتساب</h2><p>أرسل الرسالة الجاهزة وأرفق ملفاتك في المحادثة. ستجد الطلب أيضاً في خانة «طلباتي» لحين التدقيق وطلب الدفع الإلكتروني.</p><div className="success-actions"><button className="full-button" onClick={closeService}>العودة إلى الخدمات</button><button className="outline-button" onClick={() => { closeService(); setShowOrders(true); }}>عرض طلباتي</button></div></div>
+              <div className="success-state"><span><Icon name="check" size={38} /></span><h2>تم فتح واتساب لإرسال الاستفسار</h2><p>لم يُسجل هذا كطلب داخل النظام. أرسل التفاصيل للفريق عبر واتساب للمتابعة.</p><div className="success-actions"><button className="full-button" onClick={closeService}>العودة إلى الخدمات</button><button className="outline-button" onClick={() => { closeService(); setShowOrders(true); }}>عرض طلباتي</button></div></div>
             )}
           </div>
         </div>
@@ -1717,6 +1591,7 @@ export default function App() {
                       <div className="login-welcome full"><span><Icon name="phone" size={22} /></span><h3>أدخل رقمك للعودة إلى حسابك</h3><p>سيتم استعادة الحساب المحفوظ على هذا الجهاز.</p></div>
                       <label className="field full"><span>رقم الهاتف *</span><input autoFocus inputMode="tel" name="phone" required placeholder="0770 000 0000" /></label>
                       <button className="full-button full" type="submit">تسجيل الدخول</button>
+                      <button className="admin-entry-link full" onClick={navigateToAdminLogin} type="button"><Icon name="shield" size={14} /> دخول المشرفين</button>
                     </>
                   )}
                   {authError && <p className="auth-error full">{authError}</p>}
@@ -1759,8 +1634,7 @@ export default function App() {
         <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setListingOpen(false)}>
           <div className="service-modal compact-modal">
             <button className="modal-close" onClick={() => setListingOpen(false)} aria-label="إغلاق"><Icon name="close" size={20} /></button>
-            {!listingSent ? (
-              <form onSubmit={submitListing}>
+            <form onSubmit={submitListing}>
                 <div className="panel-heading"><span className="service-icon orange"><Icon name={listingMode === "ريل" ? "play" : listingMode === "خدمة" ? "sparkles" : "plus"} size={25} /></span><div><span className="section-kicker">سوق الجامعة</span><h2>{listingMode === "ريل" ? "انشر ريل جديد" : listingMode === "خدمة" ? "أضف خدمتك" : "اعرض منتجك"}</h2><p>{listingMode === "ريل" ? "فيديو قصير يوضح المنتج أو الخدمة بصدق." : "كل التفاصيل التي يحتاجها الطالب لاتخاذ القرار."}</p></div></div>
                 <div className="listing-type-tabs">
                   {(["منتج", "خدمة", "ريل"] as const).map((mode) => <button className={listingMode === mode ? "active" : ""} key={mode} onClick={() => { setListingMode(mode); setListingMediaName(""); }} type="button">{mode === "ريل" && <Icon name="play" size={13} />}{mode}</button>)}
@@ -1779,12 +1653,10 @@ export default function App() {
                   <label className="field full"><span>وصف واضح *</span><textarea name="description" required rows={3} placeholder="اذكر التفاصيل، ما يشمله السعر، والحالة أو الخبرة..." /></label>
                   <label className="upload-field full"><input name="media" required type="file" accept={listingMode === "ريل" ? "video/*" : "image/*,video/*"} onChange={(event) => setListingMediaName(event.target.files?.[0]?.name || "")} /><Icon name={listingMode === "ريل" ? "play" : "plus"} size={23} /><span><b>{listingMediaName || (listingMode === "ريل" ? "اختر فيديو أو ريل" : "أضف صوراً أو فيديو")}</b><small>{listingMode === "ريل" ? "يدعم الفيديوهات القصيرة والطويلة؛ سيُرفع الملف إلى التخزين السحابي بعد ربطه" : "يمكنك رفع فيديو طويل لشرح المنتج أو المشروع بالكامل"}</small></span></label>
                   <div className="fee-note full"><Icon name="shield" size={18} /><span><b>النشر مجاني بالكامل</b><small>تُخصم رسوم 1,000 د.ع فقط بعد نجاح بيع كل قطعة.</small></span></div>
+                  {listingError && <p className="payment-error full" role="alert">{listingError}</p>}
                   <button className="full-button full" type="submit">{listingMode === "ريل" ? "نشر الريل" : "نشر الإعلان"}</button>
                 </div>
               </form>
-            ) : (
-              <div className="success-state"><span><Icon name="check" size={38} /></span><h2>{listingMode === "ريل" ? "تم نشر الريل" : "تم نشر إعلانك"}</h2><p>ظهر المحتوى الآن في سوق الجامعة وتم حفظ بياناته على حسابك. يمكنك البحث عنه وتصفيته حسب النوع والفئة.</p><button className="full-button" onClick={() => setListingOpen(false)}>مشاهدة السوق</button></div>
-            )}
           </div>
         </div>
       )}
