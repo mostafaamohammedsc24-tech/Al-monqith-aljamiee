@@ -1,0 +1,28 @@
+services:
+  - type: web
+    name: al-monqith-aljamiee
+    runtime: node
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    startCommand: pnpm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: 24.21.0
+      - key: NODE_ENV
+        value: production
+      - key: WOOCOMMERCE_BASE_URL
+        sync: false
+      - key: WOOCOMMERCE_CONSUMER_KEY
+        sync: false
+      - key: WOOCOMMERCE_CONSUMER_SECRET
+        sync: false
+      - key: WOOCOMMERCE_WAYL_GATEWAY_ID
+        sync: false
+      - key: WOOCOMMERCE_PRODUCT_MAP
+        sync: false
+      - key: WOOCOMMERCE_WEBHOOK_SECRET
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false

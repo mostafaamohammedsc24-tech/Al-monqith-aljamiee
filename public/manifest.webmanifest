@@ -1,0 +1,53 @@
+{
+  "name": "المنقذ الجامعي",
+  "short_name": "المنقذ",
+  "description": "منصة الخدمات الجامعية وسوق مشاريع الطلبة في العراق",
+  "lang": "ar-IQ",
+  "dir": "rtl",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
+  "orientation": "portrait-primary",
+  "background_color": "#f8fafc",
+  "theme_color": "#143b63",
+  "categories": ["education", "shopping", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "الخدمات",
+      "short_name": "الخدمات",
+      "url": "/#catalog"
+    },
+    {
+      "name": "سوق الجامعة",
+      "short_name": "السوق",
+      "url": "/#market"
+    },
+    {
+      "name": "طلباتي",
+      "short_name": "طلباتي",
+      "url": "/?view=orders"
+    }
+  ]
+}

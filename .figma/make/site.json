@@ -1,0 +1,15 @@
+{
+  "title": "المنقذ الجامعي",
+  "description": "منصة الخدمات الجامعية وسوق مشاريع الطلبة في العراق",
+  "language": "ar",
+  "icons": {
+    "icon": "/icons/icon-192.png"
+  },
+  "robots": {
+    "index": true
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}
