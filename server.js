@@ -263,7 +263,7 @@ app.post("/api/admin/login", adminLoginLimiter, express.json({ limit: "8kb" }), 
   if (!config || !allowedPhone) {
     return response.status(503).json({ error: "Admin authentication is not configured on the server" });
   }
-  if (!phone || phone !== allowedPhone || typeof password !== "string" || password.length < 12 || password.length > 128) {
+  if (!phone || phone !== allowedPhone || typeof password !== "string" || !password.length || password.length > 128) {
     return response.status(401).json({ error: "بيانات دخول المشرف غير صحيحة." });
   }
 

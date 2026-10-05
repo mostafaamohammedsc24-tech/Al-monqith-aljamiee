@@ -119,7 +119,7 @@ export default function AdminPaymentsPage({ onBack, onDashboard, onServices, onD
           <p>المنقذ الجامعي</p>
           <h1>دخول المشرفين</h1>
           <label><span>رقم الهاتف</span><input name="phone" required inputMode="tel" autoComplete="username" placeholder="07XX XXX XXXX" /></label>
-          <label><span>كلمة المرور</span><input name="password" required type="password" minLength={14} autoComplete="current-password" /></label>
+          <label><span>كلمة المرور</span><input name="password" required type="password" autoComplete="current-password" /></label>
           {status && <div className="admin-payment-message error" role="alert">{status}</div>}
           <button className="admin-payment-primary" type="submit" disabled={loading}>{loading ? "جارٍ التحقق..." : "دخول آمن"}</button>
           <small>يتم التحقق من الحساب ودور المشرف لدى الخادم.</small>
