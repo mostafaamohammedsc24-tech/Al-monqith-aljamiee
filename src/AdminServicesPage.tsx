@@ -10,6 +10,9 @@ type ServiceRecord = {
   duration_label: string;
   features: string[];
   variants: string[];
+  delivery: "رقمي" | "حضوري" | "رقمي وحضوري";
+  provider: "تنفيذ آلي" | "مقدم خدمة" | "مختص أكاديمي";
+  template_group: "تقارير" | "عروض" | "تصاميم" | "سيرة مهنية" | "وثائق" | "تقنية" | null;
   is_active: boolean;
   show_price: boolean;
   sort_order: number;
@@ -23,7 +26,7 @@ type Props = {
 };
 
 const tokenKey = "najda-admin-token";
-const emptyForm = { title: "", description: "", category: "", basePrice: "", duration: "", features: "", variants: "", isActive: false, showPrice: true };
+const emptyForm = { title: "", description: "", category: "", basePrice: "", duration: "", features: "", variants: "", delivery: "رقمي" as ServiceRecord["delivery"], provider: "مقدم خدمة" as ServiceRecord["provider"], templateGroup: "" as string, isActive: false, showPrice: true };
 const formatIqd = (amount: number) => new Intl.NumberFormat("ar-IQ").format(amount);
 
 export default function AdminServicesPage({ onBack, onPayments, onDiscounts, onLatex }: Props) {
@@ -91,6 +94,9 @@ export default function AdminServicesPage({ onBack, onPayments, onDiscounts, onL
       duration: service.duration_label,
       features: service.features.join("\n"),
       variants: service.variants.join("\n"),
+      delivery: service.delivery,
+      provider: service.provider,
+      templateGroup: service.template_group || "",
       isActive: service.is_active,
       showPrice: service.show_price,
     });
@@ -117,6 +123,9 @@ export default function AdminServicesPage({ onBack, onPayments, onDiscounts, onL
       color: "blue",
       features: form.features.split("\n").map((item) => item.trim()).filter(Boolean),
       variants: form.variants.split("\n").map((item) => item.trim()).filter(Boolean),
+      delivery: form.delivery,
+      provider: form.provider,
+      template_group: form.templateGroup || null,
       is_active: form.isActive,
       show_price: form.showPrice,
     };
@@ -168,11 +177,14 @@ export default function AdminServicesPage({ onBack, onPayments, onDiscounts, onL
         <section className="admin-services-editor">
           <div><span>{editingId ? "تعديل خدمة منشورة" : "خدمة جديدة"}</span><h2>{editingId ? "تحديث بيانات الخدمة" : "إضافة خدمة"}</h2></div>
           <form onSubmit={saveService}>
-            <label><span>اسم الخدمة *</span><input required minLength={2} maxLength={120} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
-            <label><span>الفئة *</span><input required minLength={2} maxLength={80} value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} /></label>
-            <label><span>السعر بالدينار العراقي *</span><input type="number" min="0" step="1" required value={form.basePrice} onChange={(event) => setForm({ ...form, basePrice: event.target.value })} /></label>
-            <label><span>مدة التنفيذ *</span><input required maxLength={80} value={form.duration} onChange={(event) => setForm({ ...form, duration: event.target.value })} placeholder="مثال: 3 أيام" /></label>
-            <label className="admin-services-wide"><span>الوصف *</span><textarea required minLength={5} maxLength={2000} rows={3} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
+            <label><span>اسم الخدمة *</span><input required maxLength={200} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
+            <label><span>الفئة *</span><input required maxLength={100} value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} /></label>
+            <label><span>السعر بالدينار العراقي *</span><input type="number" min="0" max="2147483647" step="1" required value={form.basePrice} onChange={(event) => setForm({ ...form, basePrice: event.target.value })} /></label>
+            <label><span>مدة التنفيذ *</span><input required maxLength={150} value={form.duration} onChange={(event) => setForm({ ...form, duration: event.target.value })} placeholder="مثال: 3 أيام" /></label>
+            <label className="admin-services-wide"><span>الوصف *</span><textarea required maxLength={5000} rows={3} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
+            <label><span>طريقة التسليم</span><select value={form.delivery} onChange={(event) => setForm({ ...form, delivery: event.target.value as ServiceRecord["delivery"] })}><option>رقمي</option><option>حضوري</option><option>رقمي وحضوري</option></select></label>
+            <label><span>مقدم الخدمة</span><select value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value as ServiceRecord["provider"] })}><option>مقدم خدمة</option><option>مختص أكاديمي</option><option>تنفيذ آلي</option></select></label>
+            <label><span>مجموعة القوالب</span><select value={form.templateGroup} onChange={(event) => setForm({ ...form, templateGroup: event.target.value })}><option value="">لا توجد</option><option>تقارير</option><option>عروض</option><option>تصاميم</option><option>سيرة مهنية</option><option>وثائق</option><option>تقنية</option></select></label>
             <label><span>المزايا، كل ميزة في سطر</span><textarea rows={3} value={form.features} onChange={(event) => setForm({ ...form, features: event.target.value })} /></label>
             <label><span>الخيارات، كل خيار في سطر</span><textarea rows={3} value={form.variants} onChange={(event) => setForm({ ...form, variants: event.target.value })} /></label>
             <label className="admin-services-toggle"><input type="checkbox" checked={form.isActive} onChange={(event) => setForm({ ...form, isActive: event.target.checked })} /><span>نشر الخدمة للمستخدمين</span></label>
@@ -182,7 +194,7 @@ export default function AdminServicesPage({ onBack, onPayments, onDiscounts, onL
           {message && <p className={message.startsWith("تم") ? "admin-services-success" : "admin-services-error"} role="status">{message}</p>}
         </section>
         <section className="admin-services-list">
-          <div><span>قاعدة البيانات</span><h2>الخدمات ({services.length})</h2></div>
+          <div><span>الكتالوج الدائم</span><h2>الخدمات ({services.length})</h2></div>
           {loading && !services.length ? <p>جارٍ تحميل الخدمات...</p> : services.length ? services.map((service) => (
             <article key={service.id}>
               <div><small>{service.category} · {service.is_active ? "منشورة" : "مسودة"}</small><h3>{service.title}</h3><p>{service.description}</p></div>

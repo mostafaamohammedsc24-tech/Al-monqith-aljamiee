@@ -1,5 +1,5 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
@@ -10,6 +10,12 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const port = Number(process.env.PORT) || 10000;
 const distDirectory = path.join(directory, "dist");
+const serviceSeedPath = path.join(directory, "data", "services.seed.json");
+const serviceStoreDirectory = process.env.SERVICE_STORE_DIR?.trim()
+  || (process.env.NODE_ENV === "production" ? "/var/data" : path.join(directory, ".data"));
+const serviceStorePath = path.join(serviceStoreDirectory, "services.json");
+let serviceWriteQueue = Promise.resolve();
+let serviceStoreInitialization;
 
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
@@ -118,109 +124,162 @@ async function requireAdmin(request, response, next) {
   return next();
 }
 
-const serviceSelect = "id,title,description,category,base_price_iqd,duration_label,icon,color,features,variants,is_active,show_price,sort_order,created_at,updated_at";
+async function writeServiceStore(services) {
+  await mkdir(path.dirname(serviceStorePath), { recursive: true });
+  const temporaryPath = `${serviceStorePath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(services, null, 2)}\n`, { flag: "wx" });
+    await rename(temporaryPath, serviceStorePath);
+  } catch (error) {
+    await unlink(temporaryPath).catch(() => {});
+    throw error;
+  }
+}
+
+async function readServiceStore() {
+  try {
+    const services = JSON.parse(await readFile(serviceStorePath, "utf8"));
+    if (!Array.isArray(services)) throw new Error("Service store must contain an array.");
+    return services;
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    if (!serviceStoreInitialization) {
+      serviceStoreInitialization = (async () => {
+        try {
+          return JSON.parse(await readFile(serviceStorePath, "utf8"));
+        } catch (readError) {
+          if (readError?.code !== "ENOENT") throw readError;
+        }
+        const seed = JSON.parse(await readFile(serviceSeedPath, "utf8"));
+        if (!Array.isArray(seed)) throw new Error("Service seed must contain an array.");
+        await writeServiceStore(seed);
+        return seed;
+      })();
+    }
+    try {
+      return await serviceStoreInitialization;
+    } catch (initializationError) {
+      serviceStoreInitialization = undefined;
+      throw initializationError;
+    }
+  }
+}
+
+async function updateServiceStore(update) {
+  const operation = serviceWriteQueue.then(async () => {
+    const services = await readServiceStore();
+    const result = await update(services);
+    await writeServiceStore(services);
+    return result;
+  });
+  serviceWriteQueue = operation.catch(() => {});
+  return operation;
+}
 
 function validateServicePayload(body, partial = false) {
-  const fields = ["title", "description", "category", "base_price_iqd", "duration_label", "icon", "color", "features", "variants", "is_active", "show_price", "sort_order"];
+  const fields = ["title", "description", "category", "base_price_iqd", "duration_label", "icon", "color", "features", "variants", "delivery", "provider", "template_group", "is_active", "show_price", "sort_order"];
   const payload = {};
   for (const field of fields) {
     if (!(field in (body ?? {}))) continue;
-    payload[field] = body[field];
+    const value = body[field];
+    payload[field] = typeof value === "string"
+      ? value.trim()
+      : Array.isArray(value)
+        ? value.map((item) => typeof item === "string" ? item.trim() : item)
+        : value;
   }
 
   if (!partial && ["title", "description", "category", "base_price_iqd", "duration_label"].some((field) => !(field in payload))) {
     return { error: "أكمل اسم الخدمة ووصفها وفئتها وسعرها ومدتها." };
   }
-  if ("title" in payload && (typeof payload.title !== "string" || payload.title.trim().length < 2 || payload.title.length > 120)) return { error: "اسم الخدمة غير صالح." };
-  if ("description" in payload && (typeof payload.description !== "string" || payload.description.trim().length < 5 || payload.description.length > 2000)) return { error: "وصف الخدمة غير صالح." };
-  if ("category" in payload && (typeof payload.category !== "string" || payload.category.trim().length < 2 || payload.category.length > 80)) return { error: "فئة الخدمة غير صالحة." };
-  if ("base_price_iqd" in payload && (!Number.isSafeInteger(payload.base_price_iqd) || payload.base_price_iqd < 0)) return { error: "السعر يجب أن يكون عدداً صحيحاً غير سالب." };
-  if ("duration_label" in payload && (typeof payload.duration_label !== "string" || payload.duration_label.trim().length < 2 || payload.duration_label.length > 80)) return { error: "مدة التنفيذ غير صالحة." };
+  if ("title" in payload && (typeof payload.title !== "string" || payload.title.length < 1 || payload.title.length > 200)) return { error: "اسم الخدمة مطلوب، وبحد أقصى 200 حرف." };
+  if ("description" in payload && (typeof payload.description !== "string" || payload.description.length < 1 || payload.description.length > 5000)) return { error: "وصف الخدمة مطلوب، وبحد أقصى 5000 حرف." };
+  if ("category" in payload && (typeof payload.category !== "string" || payload.category.length < 1 || payload.category.length > 100)) return { error: "فئة الخدمة مطلوبة، وبحد أقصى 100 حرف." };
+  if ("base_price_iqd" in payload && (!Number.isSafeInteger(payload.base_price_iqd) || payload.base_price_iqd < 0 || payload.base_price_iqd > 2147483647)) return { error: "السعر يجب أن يكون عدداً صحيحاً بين صفر و2,147,483,647 دينار." };
+  if ("duration_label" in payload && (typeof payload.duration_label !== "string" || payload.duration_label.length < 1 || payload.duration_label.length > 150)) return { error: "مدة التنفيذ مطلوبة، وبحد أقصى 150 حرفاً." };
   if ("icon" in payload && (typeof payload.icon !== "string" || payload.icon.length > 40)) return { error: "رمز الخدمة غير صالح." };
   if ("color" in payload && (typeof payload.color !== "string" || payload.color.length > 40)) return { error: "لون الخدمة غير صالح." };
-  if ("features" in payload && (!Array.isArray(payload.features) || payload.features.length > 12 || payload.features.some((item) => typeof item !== "string" || item.length > 180))) return { error: "مزايا الخدمة غير صالحة." };
-  if ("variants" in payload && (!Array.isArray(payload.variants) || payload.variants.length > 8 || payload.variants.some((item) => typeof item !== "string" || item.length > 120))) return { error: "خيارات الخدمة غير صالحة." };
+  if ("delivery" in payload && !["رقمي", "حضوري", "رقمي وحضوري"].includes(payload.delivery)) return { error: "طريقة التسليم غير صالحة." };
+  if ("provider" in payload && !["تنفيذ آلي", "مقدم خدمة", "مختص أكاديمي"].includes(payload.provider)) return { error: "نوع مقدم الخدمة غير صالح." };
+  if ("template_group" in payload && payload.template_group !== null && !["تقارير", "عروض", "تصاميم", "سيرة مهنية", "وثائق", "تقنية"].includes(payload.template_group)) return { error: "مجموعة القوالب غير صالحة." };
+  if ("features" in payload && (!Array.isArray(payload.features) || payload.features.length > 50 || payload.features.some((item) => typeof item !== "string" || item.length > 500))) return { error: "أدخل حتى 50 ميزة، بحد أقصى 500 حرف لكل ميزة." };
+  if ("variants" in payload && (!Array.isArray(payload.variants) || payload.variants.length > 30 || payload.variants.some((item) => typeof item !== "string" || item.length > 300))) return { error: "أدخل حتى 30 خياراً، بحد أقصى 300 حرف لكل خيار." };
   if ("is_active" in payload && typeof payload.is_active !== "boolean") return { error: "حالة النشر غير صالحة." };
   if ("show_price" in payload && typeof payload.show_price !== "boolean") return { error: "إعداد عرض السعر غير صالح." };
   if ("sort_order" in payload && (!Number.isSafeInteger(payload.sort_order) || payload.sort_order < 0 || payload.sort_order > 100000)) return { error: "ترتيب الخدمة غير صالح." };
-  return { payload: Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, typeof value === "string" ? value.trim() : value])) };
+  return { payload };
 }
 
 app.get("/api/services", async (_request, response) => {
-  const config = configuredSupabase();
-  if (!config) return response.status(503).json({ error: "Supabase is not configured" });
-  const query = new URLSearchParams({
-    select: serviceSelect,
-    is_active: "eq.true",
-    order: "sort_order.asc,created_at.desc",
-  });
-
   try {
-    const result = await fetch(`${config.baseUrl}/rest/v1/services?${query}`, {
-      headers: { apikey: config.anonKey },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!result.ok) return response.status(503).json({ error: "تعذر تحميل الخدمات المنشورة." });
-    return response.json({ services: await result.json() });
+    const services = await readServiceStore();
+    services.sort((left, right) => left.sort_order - right.sort_order || left.title.localeCompare(right.title, "ar"));
+    return response.json({ services: services.filter((service) => service.is_active) });
   } catch {
-    return response.status(503).json({ error: "تعذر الاتصال بالخدمات." });
+    return response.status(503).json({ error: "تعذر تحميل كتالوج الخدمات من التخزين الدائم." });
   }
 });
 
 app.get("/api/admin/services", adminActionLimiter, requireAdmin, async (request, response) => {
-  const { config, token } = request.adminSession;
-  const query = new URLSearchParams({ select: serviceSelect, order: "sort_order.asc,created_at.desc", limit: "250" });
   try {
-    const result = await fetch(`${config.baseUrl}/rest/v1/services?${query}`, {
-      headers: { apikey: config.anonKey, Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!result.ok) return response.status(503).json({ error: "تعذر تحميل الخدمات؛ تحقق من تطبيق ترحيل قاعدة البيانات." });
-    return response.json({ services: await result.json() });
+    const services = await readServiceStore();
+    services.sort((left, right) => left.sort_order - right.sort_order || left.title.localeCompare(right.title, "ar"));
+    return response.json({ services });
   } catch {
-    return response.status(503).json({ error: "تعذر الاتصال بقاعدة البيانات." });
+    return response.status(503).json({ error: "تعذر تحميل الخدمات من التخزين الدائم." });
   }
 });
 
 app.post("/api/admin/services", adminActionLimiter, requireAdmin, express.json({ limit: "24kb" }), async (request, response) => {
-  const { config, token } = request.adminSession;
   const validated = validateServicePayload(request.body);
   if (validated.error) return response.status(400).json({ error: validated.error });
   try {
-    const result = await fetch(`${config.baseUrl}/rest/v1/services?select=${serviceSelect}`, {
-      method: "POST",
-      headers: { apikey: config.anonKey, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=representation" },
-      body: JSON.stringify(validated.payload),
-      signal: AbortSignal.timeout(10000),
+    const service = await updateServiceStore((services) => {
+      const now = new Date().toISOString();
+      const nextOrder = services.reduce((maximum, item) => Math.max(maximum, item.sort_order || 0), 0) + 10;
+      const created = {
+        icon: "file",
+        color: "blue",
+        features: [],
+        variants: [],
+        delivery: "رقمي",
+        provider: "مقدم خدمة",
+        template_group: null,
+        is_active: false,
+        show_price: true,
+        sort_order: nextOrder,
+        created_at: now,
+        updated_at: now,
+        ...validated.payload,
+        id: randomUUID(),
+        sort_order: validated.payload.sort_order ?? nextOrder,
+      };
+      services.push(created);
+      return created;
     });
-    if (!result.ok) return response.status(503).json({ error: "تعذر حفظ الخدمة؛ تحقق من ترحيل قاعدة البيانات." });
-    return response.status(201).json({ service: (await result.json())[0] });
+    return response.status(201).json({ service });
   } catch {
-    return response.status(503).json({ error: "تعذر الاتصال بقاعدة البيانات." });
+    return response.status(503).json({ error: "تعذر حفظ الخدمة في التخزين الدائم." });
   }
 });
 
 app.patch("/api/admin/services/:serviceId", adminActionLimiter, requireAdmin, express.json({ limit: "24kb" }), async (request, response) => {
-  const { config, token } = request.adminSession;
   const serviceId = request.params.serviceId;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(serviceId)) return response.status(400).json({ error: "معرّف الخدمة غير صالح." });
   const validated = validateServicePayload(request.body, true);
   if (validated.error) return response.status(400).json({ error: validated.error });
   if (!Object.keys(validated.payload).length) return response.status(400).json({ error: "لا توجد تغييرات لحفظها." });
-  const query = new URLSearchParams({ id: `eq.${serviceId}`, select: serviceSelect });
   try {
-    const result = await fetch(`${config.baseUrl}/rest/v1/services?${query}`, {
-      method: "PATCH",
-      headers: { apikey: config.anonKey, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=representation" },
-      body: JSON.stringify(validated.payload),
-      signal: AbortSignal.timeout(10000),
+    const service = await updateServiceStore((services) => {
+      const current = services.find((item) => item.id === serviceId);
+      if (!current) return null;
+      Object.assign(current, validated.payload, { updated_at: new Date().toISOString() });
+      return current;
     });
-    if (!result.ok) return response.status(503).json({ error: "تعذر تعديل الخدمة؛ تحقق من ترحيل قاعدة البيانات." });
-    const rows = await result.json();
-    if (!rows.length) return response.status(404).json({ error: "الخدمة غير موجودة." });
-    return response.json({ service: rows[0] });
+    if (!service) return response.status(404).json({ error: "الخدمة غير موجودة." });
+    return response.json({ service });
   } catch {
-    return response.status(503).json({ error: "تعذر الاتصال بقاعدة البيانات." });
+    return response.status(503).json({ error: "تعذر تعديل الخدمة في التخزين الدائم." });
   }
 });
 
