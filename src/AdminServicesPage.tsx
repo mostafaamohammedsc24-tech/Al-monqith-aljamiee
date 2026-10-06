@@ -33,6 +33,7 @@ export default function AdminServicesPage({ onBack, onPayments, onDiscounts, onL
   const [token, setToken] = useState(() => sessionStorage.getItem(tokenKey) || "");
   const [services, setServices] = useState<ServiceRecord[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -86,6 +87,7 @@ export default function AdminServicesPage({ onBack, onPayments, onDiscounts, onL
 
   function editService(service: ServiceRecord) {
     setEditingId(service.id);
+    setEditorOpen(true);
     setForm({
       title: service.title,
       description: service.description,
@@ -101,11 +103,28 @@ export default function AdminServicesPage({ onBack, onPayments, onDiscounts, onL
       showPrice: service.show_price,
     });
     setMessage("");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function createService() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setMessage("");
+    setEditorOpen(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function closeEditor() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setMessage("");
+    setEditorOpen(false);
   }
 
   function resetForm() {
     setEditingId(null);
     setForm(emptyForm);
+    setEditorOpen(false);
   }
 
   async function saveService(event: FormEvent<HTMLFormElement>) {
@@ -174,35 +193,42 @@ export default function AdminServicesPage({ onBack, onPayments, onDiscounts, onL
         </nav>
       </header>
       <main>
-        <section className="admin-services-editor">
-          <div><span>{editingId ? "تعديل خدمة منشورة" : "خدمة جديدة"}</span><h2>{editingId ? "تحديث بيانات الخدمة" : "إضافة خدمة"}</h2></div>
-          <form onSubmit={saveService}>
-            <label><span>اسم الخدمة *</span><input required maxLength={200} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
-            <label><span>الفئة *</span><input required maxLength={100} value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} /></label>
-            <label><span>السعر بالدينار العراقي *</span><input type="number" min="0" max="2147483647" step="1" required value={form.basePrice} onChange={(event) => setForm({ ...form, basePrice: event.target.value })} /></label>
-            <label><span>مدة التنفيذ *</span><input required maxLength={150} value={form.duration} onChange={(event) => setForm({ ...form, duration: event.target.value })} placeholder="مثال: 3 أيام" /></label>
-            <label className="admin-services-wide"><span>الوصف *</span><textarea required maxLength={5000} rows={3} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
-            <label><span>طريقة التسليم</span><select value={form.delivery} onChange={(event) => setForm({ ...form, delivery: event.target.value as ServiceRecord["delivery"] })}><option>رقمي</option><option>حضوري</option><option>رقمي وحضوري</option></select></label>
-            <label><span>مقدم الخدمة</span><select value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value as ServiceRecord["provider"] })}><option>مقدم خدمة</option><option>مختص أكاديمي</option><option>تنفيذ آلي</option></select></label>
-            <label><span>مجموعة القوالب</span><select value={form.templateGroup} onChange={(event) => setForm({ ...form, templateGroup: event.target.value })}><option value="">لا توجد</option><option>تقارير</option><option>عروض</option><option>تصاميم</option><option>سيرة مهنية</option><option>وثائق</option><option>تقنية</option></select></label>
-            <label><span>المزايا، كل ميزة في سطر</span><textarea rows={3} value={form.features} onChange={(event) => setForm({ ...form, features: event.target.value })} /></label>
-            <label><span>الخيارات، كل خيار في سطر</span><textarea rows={3} value={form.variants} onChange={(event) => setForm({ ...form, variants: event.target.value })} /></label>
-            <label className="admin-services-toggle"><input type="checkbox" checked={form.isActive} onChange={(event) => setForm({ ...form, isActive: event.target.checked })} /><span>نشر الخدمة للمستخدمين</span></label>
-            <label className="admin-services-toggle"><input type="checkbox" checked={form.showPrice} onChange={(event) => setForm({ ...form, showPrice: event.target.checked })} /><span>إظهار السعر</span></label>
-            <div className="admin-services-actions"><button className="admin-services-primary" disabled={loading}>{loading ? "جارٍ الحفظ..." : editingId ? "حفظ التعديلات" : "إضافة الخدمة"}</button>{editingId && <button type="button" onClick={resetForm}>إلغاء التعديل</button>}</div>
-          </form>
-          {message && <p className={message.startsWith("تم") ? "admin-services-success" : "admin-services-error"} role="status">{message}</p>}
-        </section>
-        <section className="admin-services-list">
-          <div><span>الكتالوج الدائم</span><h2>الخدمات ({services.length})</h2></div>
-          {loading && !services.length ? <p>جارٍ تحميل الخدمات...</p> : services.length ? services.map((service) => (
-            <article key={service.id}>
-              <div><small>{service.category} · {service.is_active ? "منشورة" : "مسودة"}</small><h3>{service.title}</h3><p>{service.description}</p></div>
-              <strong>{service.show_price ? `${formatIqd(service.base_price_iqd)} د.ع` : "السعر مخفي"}</strong>
-              <button onClick={() => editService(service)}>تعديل</button>
-            </article>
-          )) : <p className="admin-services-empty">لا توجد خدمات محفوظة بعد. أضف الخدمة الأولى أعلاه.</p>}
-        </section>
+        {editorOpen ? (
+          <section className="admin-services-editor">
+            <div className="admin-services-editor-heading">
+              <div><span>{editingId ? "تعديل خدمة" : "إضافة خدمة"}</span><h2>{editingId ? form.title || "تحديث بيانات الخدمة" : "خدمة جديدة"}</h2></div>
+              <button className="admin-services-editor-back" type="button" onClick={closeEditor}>العودة إلى قائمة الخدمات</button>
+            </div>
+            <form onSubmit={saveService}>
+              <label><span>اسم الخدمة *</span><input required maxLength={200} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} /></label>
+              <label><span>الفئة *</span><input required maxLength={100} value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })} /></label>
+              <label><span>السعر بالدينار العراقي *</span><input type="number" min="0" max="2147483647" step="1" required value={form.basePrice} onChange={(event) => setForm({ ...form, basePrice: event.target.value })} /></label>
+              <label><span>مدة التنفيذ *</span><input required maxLength={150} value={form.duration} onChange={(event) => setForm({ ...form, duration: event.target.value })} placeholder="مثال: 3 أيام" /></label>
+              <label className="admin-services-wide"><span>الوصف *</span><textarea required maxLength={5000} rows={3} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
+              <label><span>طريقة التسليم</span><select value={form.delivery} onChange={(event) => setForm({ ...form, delivery: event.target.value as ServiceRecord["delivery"] })}><option>رقمي</option><option>حضوري</option><option>رقمي وحضوري</option></select></label>
+              <label><span>مقدم الخدمة</span><select value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value as ServiceRecord["provider"] })}><option>مقدم خدمة</option><option>مختص أكاديمي</option><option>تنفيذ آلي</option></select></label>
+              <label><span>مجموعة القوالب</span><select value={form.templateGroup} onChange={(event) => setForm({ ...form, templateGroup: event.target.value })}><option value="">لا توجد</option><option>تقارير</option><option>عروض</option><option>تصاميم</option><option>سيرة مهنية</option><option>وثائق</option><option>تقنية</option></select></label>
+              <label><span>المزايا، كل ميزة في سطر</span><textarea rows={3} value={form.features} onChange={(event) => setForm({ ...form, features: event.target.value })} /></label>
+              <label><span>الخيارات، كل خيار في سطر</span><textarea rows={3} value={form.variants} onChange={(event) => setForm({ ...form, variants: event.target.value })} /></label>
+              <label className="admin-services-toggle"><input type="checkbox" checked={form.isActive} onChange={(event) => setForm({ ...form, isActive: event.target.checked })} /><span>نشر الخدمة للمستخدمين</span></label>
+              <label className="admin-services-toggle"><input type="checkbox" checked={form.showPrice} onChange={(event) => setForm({ ...form, showPrice: event.target.checked })} /><span>إظهار السعر</span></label>
+              <div className="admin-services-actions"><button className="admin-services-primary" disabled={loading}>{loading ? "جارٍ الحفظ..." : editingId ? "حفظ التعديلات" : "إضافة الخدمة"}</button><button className="admin-services-editor-back" type="button" onClick={closeEditor}>إلغاء</button></div>
+            </form>
+            {message && <p className={message.startsWith("تم") ? "admin-services-success" : "admin-services-error"} role="status">{message}</p>}
+          </section>
+        ) : (
+          <section className="admin-services-list">
+            <div className="admin-services-list-heading"><div><span>الكتالوج الدائم</span><h2>الخدمات ({services.length})</h2></div><button className="admin-services-primary" type="button" onClick={createService}>إضافة خدمة</button></div>
+            {message && <p className="admin-services-success" role="status">{message}</p>}
+            {loading && !services.length ? <p>جارٍ تحميل الخدمات...</p> : services.length ? services.map((service) => (
+              <article key={service.id}>
+                <div><small>{service.category} · {service.is_active ? "منشورة" : "مسودة"}</small><h3>{service.title}</h3><p>{service.description}</p></div>
+                <strong>{service.show_price ? `${formatIqd(service.base_price_iqd)} د.ع` : "السعر مخفي"}</strong>
+                <button type="button" onClick={() => editService(service)}>تعديل</button>
+              </article>
+            )) : <p className="admin-services-empty">لا توجد خدمات محفوظة بعد. أضف الخدمة الأولى أعلاه.</p>}
+          </section>
+        )}
       </main>
     </div>
   );
