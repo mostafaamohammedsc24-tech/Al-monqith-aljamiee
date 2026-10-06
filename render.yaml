@@ -5,6 +5,10 @@ services:
     buildCommand: pnpm install --frozen-lockfile && pnpm build
     startCommand: pnpm start
     healthCheckPath: /healthz
+    disk:
+      name: disk
+      mountPath: /var/data
+      sizeGB: 10
     envVars:
       - key: NODE_VERSION
         value: 24.21.0

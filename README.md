@@ -59,10 +59,12 @@ This creates the receipt record and number; PDF generation and private signed
 storage are not implemented yet.
 
 Admins can add and edit services at `/admin/services`, including category,
-description, IQD price, duration, features, variants, visibility, and publish
-status. The public service list reads only active rows from Supabase. No sample
-services or templates are inserted; add real services after applying the
-migration.
+description, IQD price, duration, delivery, provider, template group, features,
+variants, visibility, and publish status. The service API stores the catalog as
+JSON on Render's persistent disk at `/var/data/services.json`; the bundled
+`data/services.seed.json` initializes the disk on first access. Supabase remains
+responsible for admin authentication, but the service catalog does not require a
+Supabase table or migration. Keep the Render disk mounted at `/var/data`.
 
 Important: the current student order form still saves orders in browser
 `localStorage`. Those orders are not visible to this Supabase-backed admin list

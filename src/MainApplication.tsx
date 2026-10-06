@@ -1,6 +1,5 @@
 // @refresh reset
 import { FormEvent, lazy, ReactNode, Suspense, useEffect, useMemo, useState } from "react";
-import { catalogCategories, catalogServices, CatalogService } from "./catalog-data";
 import "./market-share.css";
 import type { TemplateChoice } from "./TemplatesPage";
 
@@ -216,6 +215,9 @@ type Service = {
   duration: string;
   icon: IconName;
   color: string;
+  delivery: "رقمي" | "حضوري" | "رقمي وحضوري";
+  provider: "تنفيذ آلي" | "مقدم خدمة" | "مختص أكاديمي";
+  templateGroup: "تقارير" | "عروض" | "تصاميم" | "سيرة مهنية" | "وثائق" | "تقنية" | null;
   popular?: boolean;
   showPrice: boolean;
   features: string[];
@@ -536,6 +538,39 @@ const speedOptions = [
   { id: "urgent", label: "مستعجل جداً", detail: "خلال 24 ساعة", extra: 10000 },
 ];
 
+const serviceTemplates: Record<string, { name: string; style: string; description: string }[]> = {
+  "تقارير": [
+    { name: "أكاديمي كلاسيكي", style: "t1", description: "هوامش رسمية وعناوين واضحة" },
+    { name: "بحث حديث", style: "t2", description: "تخطيط نظيف مع إبراز البيانات" },
+    { name: "رسمي داكن", style: "t3", description: "هوية قوية للمشاريع المتقدمة" },
+  ],
+  "عروض": [
+    { name: "عرض Minimal", style: "t2", description: "مساحات هادئة ومحتوى مركز" },
+    { name: "عرض بصري", style: "t4", description: "صور ورسوم وبيانات بارزة" },
+    { name: "عرض المناقشة", style: "t3", description: "مهيأ للمشاريع واللجان" },
+  ],
+  "تصاميم": [
+    { name: "هندسي شبكي", style: "t5", description: "تكوين منظم وحديث" },
+    { name: "علمي نظيف", style: "t2", description: "ألوان هادئة ووضوح عالٍ" },
+    { name: "إبداعي ملون", style: "t4", description: "طابع شبابي ملفت" },
+  ],
+  "سيرة مهنية": [
+    { name: "مهني ATS", style: "t1", description: "مهيأ لأنظمة التوظيف" },
+    { name: "حديث بعمودين", style: "t2", description: "ملائم للطلاب والخريجين" },
+    { name: "Portfolio بصري", style: "t4", description: "للتخصصات الإبداعية" },
+  ],
+  "وثائق": [
+    { name: "نموذج رسمي", style: "t1", description: "متوافق مع المعاملات" },
+    { name: "نموذج مبسط", style: "t2", description: "سهل القراءة والتعبئة" },
+    { name: "أرشفة رقمية", style: "t5", description: "منظم للحفظ والاسترجاع" },
+  ],
+  "تقنية": [
+    { name: "واجهة لوحة تحكم", style: "t5", description: "للأنظمة الإدارية" },
+    { name: "واجهة طلابية", style: "t2", description: "خفيفة وسهلة الاستخدام" },
+    { name: "بوابة مؤسسة", style: "t3", description: "هوية رسمية متكاملة" },
+  ],
+};
+
 const formatPrice = (value: number) => new Intl.NumberFormat("ar-IQ").format(value);
 
 type AppPage = "home" | "market" | "profile" | "templates" | "admin-login" | "admin-payments" | "admin-services" | "admin-latex" | "admin-discounts";
@@ -613,7 +648,7 @@ export default function App() {
     fetch("/api/services")
       .then(async (response) => {
         if (!response.ok) throw new Error("تعذر تحميل الخدمات المنشورة.");
-        return response.json() as Promise<{ services?: Array<{ title: string; category: string; description: string; base_price_iqd: number; duration_label: string; icon: string; color: string; features: string[]; variants: string[]; show_price: boolean }> }>;
+        return response.json() as Promise<{ services?: Array<{ title: string; category: string; description: string; base_price_iqd: number; duration_label: string; icon: string; color: string; features: string[]; variants: string[]; delivery: Service["delivery"]; provider: Service["provider"]; template_group: Service["templateGroup"]; show_price: boolean }> }>;
       })
       .then((result) => {
         if (cancelled) return;
@@ -626,7 +661,11 @@ export default function App() {
           duration: service.duration_label,
           icon: service.icon as IconName,
           color: service.color,
+          delivery: service.delivery,
+          provider: service.provider,
+          templateGroup: service.template_group,
           features: service.features || [],
+          templates: service.template_group ? serviceTemplates[service.template_group] : undefined,
           variants: service.variants || [],
           showPrice: service.show_price,
         })));
@@ -639,13 +678,17 @@ export default function App() {
   }, []);
 
   const serviceCategories = ["الكل", ...new Set(services.map((service) => service.category))];
+  const catalogCategories = serviceCategories.slice(1).map((name) => ({
+    name,
+    count: services.filter((service) => service.category === name).length,
+  }));
   const visibleServices = useMemo(() => {
     return activeCategory === "الكل" ? services : services.filter((service) => service.category === activeCategory);
   }, [activeCategory, services]);
 
   const filteredCatalog = useMemo(() => {
     const normalizedQuery = catalogQuery.trim().toLocaleLowerCase("ar");
-    return catalogServices.filter((service) => {
+    return services.filter((service) => {
       const categoryMatches = catalogCategory === "الكل" || service.category === catalogCategory;
       const queryMatches =
         !normalizedQuery ||
@@ -654,7 +697,7 @@ export default function App() {
         service.description.toLocaleLowerCase("ar").includes(normalizedQuery);
       return categoryMatches && queryMatches;
     });
-  }, [catalogCategory, catalogQuery]);
+  }, [services, catalogCategory, catalogQuery]);
 
   const filteredMarket = useMemo(() => {
     const query = marketQuery.trim().toLocaleLowerCase("ar");
@@ -715,8 +758,8 @@ export default function App() {
 
   const orderPrice = useMemo(() => {
     if (!selectedService) return { base: 0, speedFee: 0, discount: 0, pointsDiscount: 0, total: 0 };
-    const base = Number(selectedService.price.replace(",", ""));
-    const speedFee = speedOptions.find((option) => option.id === speed)?.extra || 0;
+    const base = selectedService.showPrice ? Number(selectedService.price.replace(",", "")) : 0;
+    const speedFee = selectedService.showPrice ? speedOptions.find((option) => option.id === speed)?.extra || 0 : 0;
     const subtotal = base + speedFee;
     const discount = appliedCoupon ? Math.min(subtotal, appliedCoupon.type === "fixed" ? appliedCoupon.value : Math.round(subtotal * Math.min(100, appliedCoupon.value) / 100)) : 0;
     const pointsDiscount = usePoints ? Math.floor(points / 100) * 1000 : 0;
@@ -907,30 +950,6 @@ export default function App() {
     document.body.style.overflow = "hidden";
   }
 
-  function openCatalogService(service: CatalogService) {
-    const categoryIndex = catalogCategories.findIndex((category) => category.name === service.category);
-    const icons: IconName[] = ["file", "book", "presentation", "pen", "grid", "sparkles", "receipt", "clock", "book", "search", "presentation", "user", "store", "receipt", "star", "grid", "palette", "store", "sparkles"];
-    const colors = ["mint", "blue", "purple", "orange", "rose", "yellow"];
-    openService({
-      id: service.id + 1000,
-      category: service.category,
-      title: service.title,
-      description: service.description,
-      price: formatPrice(service.price),
-      duration: service.duration,
-      icon: icons[categoryIndex] || "file",
-      color: colors[categoryIndex % colors.length],
-      showPrice: true,
-      features: [
-        `التسليم: ${service.delivery}`,
-        `التنفيذ بواسطة: ${service.provider}`,
-        "متابعة وتعديلات وفق المتطلبات",
-      ],
-      templates: undefined,
-      variants: service.variants,
-    });
-  }
-
   function selectTemplate(template: TemplateChoice) {
     const service = template.category === "عروض تقديمية" ? services[1] : template.category === "بوسترات" ? services[3] : template.category === "سيرة ذاتية" ? {
       ...services[4],
@@ -1008,7 +1027,7 @@ export default function App() {
       `التنفيذ: ${selectedSpeed?.label} – ${selectedSpeed?.detail}`,
       `كود الخصم: ${appliedCoupon?.code || "لا يوجد"}`,
       `خصم النقاط: ${usePoints ? `${orderPrice.pointsDiscount} د.ع` : "لا يوجد"}`,
-      `السعر التقديري: ${formatPrice(orderPrice.total)} د.ع`,
+      selectedService.showPrice ? `السعر التقديري: ${formatPrice(orderPrice.total)} د.ع` : "السعر النهائي يحدد بعد مراجعة تفاصيل الطلب.",
       "الاستنساخ والتوصيل إلى الجامعة: مجاناً",
       "",
       "هذا استفسار عبر واتساب ولم يُسجل كطلب في النظام بعد.",
@@ -1276,7 +1295,7 @@ export default function App() {
           <div className="mx-auto max-w-[1180px] px-5 py-20 lg:px-8">
             <div className="catalog-intro">
               <div><span className="section-kicker">دليل المنقذ الجامعي</span><h2>الخدمات المنشورة</h2><p>تظهر هنا الخدمات التي أضافها المشرف واعتمد أسعارها.</p></div>
-              <div className="catalog-count"><strong>{catalogServices.length}</strong><span>خدمة متاحة</span></div>
+              <div className="catalog-count"><strong>{services.length}</strong><span>خدمة متاحة</span></div>
             </div>
             <div className="catalog-search">
               <Icon name="search" size={21} />
@@ -1290,7 +1309,7 @@ export default function App() {
             </div>
             <div className="catalog-categories">
               <button className={catalogCategory === "الكل" ? "active" : ""} onClick={() => { setCatalogCategory("الكل"); setCatalogLimit(12); }}>
-                <span><Icon name="grid" size={18} /></span><b>كل الخدمات</b><small>{catalogServices.length}</small>
+                <span><Icon name="grid" size={18} /></span><b>كل الخدمات</b><small>{services.length}</small>
               </button>
               {catalogCategories.map((category, index) => {
                 const icons: IconName[] = ["file", "book", "presentation", "pen", "grid", "sparkles", "receipt", "clock", "book", "search", "presentation", "user", "store", "receipt", "star", "grid", "palette", "store", "sparkles"];
@@ -1309,12 +1328,12 @@ export default function App() {
               <>
                 <div className="catalog-grid">
                   {filteredCatalog.slice(0, catalogLimit).map((service) => (
-                    <button className="catalog-card" key={service.id} onClick={() => openCatalogService(service)}>
+                    <button className="catalog-card" key={service.id} onClick={() => openService(service)}>
                       <span className="catalog-card-top"><i>{String(service.id).padStart(3, "0")}</i><em>{service.category}</em></span>
                       <h3>{service.title}</h3>
                       <p>{service.description}</p>
                       <span className="catalog-tags"><i><Icon name="clock" size={13} />{service.duration}</i><i><Icon name={service.delivery === "رقمي" ? "file" : "store"} size={13} />{service.delivery}</i>{service.templateGroup && <i className="has-templates"><Icon name="palette" size={13} />قوالب {service.templateGroup}</i>}</span>
-                      <span className="catalog-card-footer"><span><small>تبدأ من</small><strong>{formatPrice(service.price)} <i>د.ع</i></strong></span><b><Icon name="arrow" size={17} /></b></span>
+                      <span className="catalog-card-footer"><span><small>{service.showPrice ? "تبدأ من" : "السعر"}</small><strong>{service.showPrice ? `${formatPrice(Number(service.price))} <i>د.ع</i>` : "يحدد بعد المراجعة"}</strong></span><b><Icon name="arrow" size={17} /></b></span>
                     </button>
                   ))}
                 </div>
@@ -1461,7 +1480,7 @@ export default function App() {
                       <div>{selectedService.templates.map((template) => <span className={template.style} key={template.name}><i /><i /><b>{template.name}</b><small>{template.description}</small></span>)}</div>
                     </div>
                   )}
-                  <div className="order-summary"><span><small>السعر</small><strong>تبدأ من {selectedService.price} د.ع</strong></span><span><small>مدة الإنجاز</small><strong>{selectedService.duration}</strong></span></div>
+                  <div className="order-summary"><span><small>السعر</small><strong>{selectedService.showPrice ? `تبدأ من ${selectedService.price} د.ع` : "يحدد بعد مراجعة الطلب"}</strong></span><span><small>مدة الإنجاز</small><strong>{selectedService.duration}</strong></span></div>
                   <button className="full-button" onClick={() => setOrderStep("form")}>طلب هذه الخدمة <Icon name="arrow" size={18} /></button>
                 </div>
               </div>
@@ -1526,7 +1545,7 @@ export default function App() {
                     {orderPrice.speedFee > 0 && <div><span>تنفيذ أسرع</span><b>+{formatPrice(orderPrice.speedFee)} د.ع</b></div>}
                     {orderPrice.discount > 0 && <div className="saving"><span>كود الخصم</span><b>-{formatPrice(orderPrice.discount)} د.ع</b></div>}
                     {orderPrice.pointsDiscount > 0 && <div className="saving"><span>خصم النقاط</span><b>-{formatPrice(orderPrice.pointsDiscount)} د.ع</b></div>}
-                    <div className="summary-total"><span>السعر التقديري</span><strong>{formatPrice(orderPrice.total)} <i>د.ع</i></strong></div>
+                    <div className="summary-total"><span>{selectedService.showPrice ? "السعر التقديري" : "السعر"}</span><strong>{selectedService.showPrice ? <>{formatPrice(orderPrice.total)} <i>د.ع</i></> : "يحدد بعد المراجعة"}</strong></div>
                     <p><Icon name="bag" size={15} /> يشمل الاستنساخ والتوصيل المجاني إلى جامعتك</p>
                   </div>
                   <button className="full-button full" type="submit">إرسال الطلب للمراجعة <Icon name="arrow" size={18} /></button>
