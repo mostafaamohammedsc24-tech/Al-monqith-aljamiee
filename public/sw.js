@@ -1,4 +1,4 @@
-const CACHE_NAME = "al-monqith-v2";
+const CACHE_NAME = "al-monqith-v3";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/icon-maskable-512.png"];
 
 self.addEventListener("install", (event) => {

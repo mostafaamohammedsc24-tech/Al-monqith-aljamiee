@@ -1,6 +1,6 @@
 {
   "name": "المنقذ الجامعي",
-  "short_name": "المنقذ",
+  "short_name": "المنقذ الجامعي",
   "description": "منصة الخدمات الجامعية وسوق مشاريع الطلبة في العراق",
   "lang": "ar-IQ",
   "dir": "rtl",
@@ -10,8 +10,8 @@
   "display": "standalone",
   "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "orientation": "portrait-primary",
-  "background_color": "#f8fafc",
-  "theme_color": "#143b63",
+  "background_color": "#102d4a",
+  "theme_color": "#102d4a",
   "categories": ["education", "shopping", "productivity"],
   "icons": [
     {
