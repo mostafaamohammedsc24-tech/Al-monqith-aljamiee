@@ -48,7 +48,8 @@ export default function FreeReportCover({ profile }: { profile: { fullName: stri
   const [error, setError] = useState("");
 
   function updateField(event: ChangeEvent<HTMLInputElement>) {
-    setDetails((current) => ({ ...current, [event.currentTarget.name]: event.currentTarget.value }));
+    const { name, value } = event.currentTarget;
+    setDetails((current) => ({ ...current, [name]: value }));
   }
 
   async function updateLogo(event: ChangeEvent<HTMLInputElement>) {
