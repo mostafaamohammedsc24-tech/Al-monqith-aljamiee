@@ -15,7 +15,7 @@ type DiscountCode = {
 
 const API = import.meta.env.VITE_ADMIN_DISCOUNTS_ENDPOINT || "/api/admin/discounts";
 
-export default function AdminDiscountsPage({ onBack, onLatex }: { onBack: () => void; onLatex: () => void }) {
+export default function AdminDiscountsPage({ onBack, onRewards }: { onBack: () => void; onRewards: () => void }) {
   const [token, setToken] = useState(() => sessionStorage.getItem("najda-admin-token") || "");
   const [discounts, setDiscounts] = useState<DiscountCode[]>([]);
   const [type, setType] = useState<DiscountCode["type"]>("percentage");
@@ -137,7 +137,7 @@ export default function AdminDiscountsPage({ onBack, onLatex }: { onBack: () => 
     <div className="discount-admin" dir="rtl">
       <aside>
         <div className="discount-admin-brand"><span>%</span><div><b>المنقذ الجامعي</b><small>لوحة الإدارة</small></div></div>
-        <nav><button className="active">أكواد الخصم</button><button onClick={onLatex}>مختبر LaTeX</button><button onClick={onBack}>العودة للموقع</button></nav>
+        <nav><button className="active">أكواد الخصم</button><button onClick={onRewards}>مراحل النقاط والهدايا</button><button onClick={onBack}>العودة للموقع</button></nav>
         <button className="discount-logout" onClick={() => { sessionStorage.removeItem("najda-admin-token"); setToken(""); }}>تسجيل الخروج</button>
       </aside>
       <main>

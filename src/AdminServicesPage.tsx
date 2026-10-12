@@ -22,14 +22,13 @@ type Props = {
   onBack: () => void;
   onPayments: () => void;
   onDiscounts: () => void;
-  onLatex: () => void;
 };
 
 const tokenKey = "najda-admin-token";
 const emptyForm = { title: "", description: "", category: "", basePrice: "", duration: "", features: "", variants: "", delivery: "رقمي" as ServiceRecord["delivery"], provider: "مقدم خدمة" as ServiceRecord["provider"], templateGroup: "" as string, isActive: false, showPrice: true };
 const formatIqd = (amount: number) => new Intl.NumberFormat("ar-IQ").format(amount);
 
-export default function AdminServicesPage({ onBack, onPayments, onDiscounts, onLatex }: Props) {
+export default function AdminServicesPage({ onBack, onPayments, onDiscounts }: Props) {
   const [token, setToken] = useState(() => sessionStorage.getItem(tokenKey) || "");
   const [services, setServices] = useState<ServiceRecord[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -187,7 +186,7 @@ export default function AdminServicesPage({ onBack, onPayments, onDiscounts, onL
         <div><span>المنقذ الجامعي</span><h1>إدارة الخدمات</h1></div>
         <nav aria-label="إدارة المشرف">
           <button onClick={onPayments}>المدفوعات</button><button className="active">الخدمات</button>
-          <button onClick={onDiscounts}>الخصومات</button><button onClick={onLatex}>مختبر LaTeX</button>
+          <button onClick={onDiscounts}>الخصومات</button>
           <button onClick={onBack}>الموقع</button>
           <button onClick={() => { sessionStorage.removeItem(tokenKey); setToken(""); }}>خروج</button>
         </nav>

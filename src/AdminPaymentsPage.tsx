@@ -9,6 +9,19 @@ type AdminOrder = {
   status: string;
   payment_status: string;
   created_at: string;
+  order_type?: "whatsapp_request";
+  full_name?: string;
+  student_phone?: string;
+  university?: string;
+  college?: string;
+  department?: string;
+  supervisor?: string;
+  report_title?: string;
+  notes?: string;
+  variant?: string;
+  template?: string;
+  preferred_color?: string;
+  speed?: string;
 };
 
 type Props = {
@@ -16,13 +29,12 @@ type Props = {
   onDashboard: () => void;
   onServices: () => void;
   onDiscounts: () => void;
-  onLatex: () => void;
 };
 
 const tokenKey = "najda-admin-token";
 const formatIqd = (amount: number) => new Intl.NumberFormat("ar-IQ").format(amount);
 
-export default function AdminPaymentsPage({ onBack, onDashboard, onServices, onDiscounts, onLatex }: Props) {
+export default function AdminPaymentsPage({ onBack, onDashboard, onServices, onDiscounts }: Props) {
   const [token, setToken] = useState(() => sessionStorage.getItem(tokenKey) || "");
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [activeOrder, setActiveOrder] = useState<string | null>(null);
@@ -39,17 +51,17 @@ export default function AdminPaymentsPage({ onBack, onDashboard, onServices, onD
       const response = await fetch("/api/admin/orders", {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
+      const result = await response.json().catch(() => null) as { orders?: AdminOrder[]; warning?: string; error?: string } | null;
       if (!response.ok) {
-        const result = await response.json().catch(() => null) as { error?: string } | null;
         if (response.status === 401 || response.status === 403) {
           sessionStorage.removeItem(tokenKey);
           setToken("");
         }
         throw new Error(result?.error || "تعذر تحميل الطلبات.");
       }
-      const result = await response.json() as { orders?: AdminOrder[] };
+      if (!result) throw new Error("استجابة الخادم غير صالحة.");
       setOrders(result.orders || []);
-      setStatus("");
+      setStatus(result.warning || "");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "تعذر تحميل الطلبات.");
     } finally {
@@ -131,27 +143,32 @@ export default function AdminPaymentsPage({ onBack, onDashboard, onServices, onD
   return (
     <div className="admin-payments" dir="rtl">
       <header>
-        <div><span>المنقذ الجامعي</span><h1>تأكيد المدفوعات</h1><p>الطلبات التي تنتظر تسجيل القبض.</p></div>
+        <div><span>المنقذ الجامعي</span><h1>الطلبات والمدفوعات</h1><p>طلبات العملاء المحفوظة، والطلبات التي تنتظر تسجيل القبض.</p></div>
         <nav aria-label="إدارة المشرف">
           <button className="active" onClick={onDashboard}>المدفوعات</button>
           <button onClick={onServices}>الخدمات</button>
           <button onClick={onDiscounts}>الخصومات</button>
-          <button onClick={onLatex}>مختبر LaTeX</button>
           <button onClick={onBack}>الموقع</button>
           <button onClick={() => { sessionStorage.removeItem(tokenKey); setToken(""); }}>خروج</button>
         </nav>
       </header>
       <main>
-        <div className="admin-payments-heading"><div><span>المراجعة المالية</span><h2>بانتظار تأكيد القبض</h2></div><button onClick={() => void loadOrders(token)} disabled={loading}>تحديث القائمة</button></div>
+        <div className="admin-payments-heading"><div><span>متابعة الطلبات</span><h2>الطلبات المحفوظة</h2></div><button onClick={() => void loadOrders(token)} disabled={loading}>تحديث القائمة</button></div>
         {status && <p className={`admin-payment-message ${status.startsWith("تم تسجيل") ? "success" : "error"}`} role="status">{status}</p>}
         {loading && !orders.length ? <p className="admin-payments-empty">جارٍ تحميل الطلبات...</p> : orders.length ? (
           <section className="admin-payment-list" aria-label="طلبات بانتظار الدفع">
             {orders.map((order) => (
               <article key={order.id}>
-                <div className="admin-order-summary"><small>{order.order_number} · {new Date(order.created_at).toLocaleDateString("ar-IQ")}</small><h3>{order.service_title}</h3><span>{order.status}</span></div>
-                <strong>{formatIqd(order.total_iqd)} <small>د.ع</small></strong>
-                <button className="admin-payment-confirm" onClick={() => setActiveOrder(activeOrder === order.id ? null : order.id)} disabled={loading}>{activeOrder === order.id ? "إغلاق" : "تسجيل قبض يدوي"}</button>
-                {activeOrder === order.id && (
+                <div className="admin-order-summary"><small>{order.order_number} · {new Date(order.created_at).toLocaleDateString("ar-IQ")}</small><h3>{order.service_title}</h3><span>{order.order_type === "whatsapp_request" ? "أُحيل إلى واتساب لاستكمال المعاملة" : order.status}</span></div>
+                <strong>{formatIqd(order.total_iqd)} <small>{order.order_type === "whatsapp_request" ? "د.ع تقديري" : "د.ع"}</small></strong>
+                {order.order_type === "whatsapp_request" ? (
+                  <a className="admin-payment-confirm" href={`https://wa.me/${order.student_phone?.replace(/\D/g, "") || ""}`} target="_blank" rel="noreferrer">مراسلة الطالب</a>
+                ) : (
+                  <button className="admin-payment-confirm" onClick={() => setActiveOrder(activeOrder === order.id ? null : order.id)} disabled={loading}>{activeOrder === order.id ? "إغلاق" : "تسجيل قبض يدوي"}</button>
+                )}
+                {order.order_type === "whatsapp_request" ? (
+                  <details className="admin-whatsapp-details"><summary>بيانات الطلب والطالب</summary><div><span>الطالب: {order.full_name}</span><span>الهاتف: {order.student_phone}</span><span>الجامعة والكلية: {order.university} • {order.college}</span><span>القسم: {order.department}</span><span>العنوان: {order.report_title}</span><span>المشرف: {order.supervisor || "غير محدد"}</span><span>التنفيذ: {order.variant || "غير محدد"} • {order.speed || "اعتيادي"}</span><span>القالب واللون: {order.template || "غير محدد"} • {order.preferred_color || "غير محدد"}</span>{order.notes && <span>ملاحظات: {order.notes}</span>}</div></details>
+                ) : activeOrder === order.id ? (
                   <form className="admin-payment-form" onSubmit={(event) => void confirmOfflinePayment(event, order.id)}>
                     <label><span>طريقة القبض</span><select name="method" defaultValue="bank_transfer"><option value="bank_transfer">تحويل خارجي</option><option value="cash">نقداً أو تسليم مادي</option></select></label>
                     <label><span>رقم الإيصال أو مرجع التحويل</span><input name="reference" maxLength={120} placeholder="اختياري" /></label>
@@ -159,11 +176,11 @@ export default function AdminPaymentsPage({ onBack, onDashboard, onServices, onD
                     <p>سيُسجّل المشرف والطريقة والسبب والمبلغ ووقت التأكيد. لا يمكن تكرار اعتماد الطلب.</p>
                     <button className="admin-payment-primary" type="submit" disabled={loading}>{loading ? "جارٍ الحفظ..." : "تأكيد استلام المبلغ"}</button>
                   </form>
-                )}
+                ) : null}
               </article>
             ))}
           </section>
-        ) : <div className="admin-payments-empty"><strong>لا توجد طلبات معلّقة</strong><p>ستظهر هنا الطلبات المحفوظة في قاعدة البيانات بانتظار الدفع.</p></div>}
+        ) : <div className="admin-payments-empty"><strong>لا توجد طلبات بعد</strong><p>ستظهر هنا الطلبات المحفوظة والمحالة إلى واتساب، وطلبات قاعدة البيانات المعلّقة.</p></div>}
       </main>
     </div>
   );

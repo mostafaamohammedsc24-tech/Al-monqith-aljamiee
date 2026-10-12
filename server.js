@@ -1,4 +1,4 @@
-import { createHmac, randomUUID, timingSafeEqual } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +14,26 @@ const serviceSeedPath = path.join(directory, "data", "services.seed.json");
 const serviceStoreDirectory = process.env.SERVICE_STORE_DIR?.trim()
   || (process.env.NODE_ENV === "production" ? "/var/data" : path.join(directory, ".data"));
 const serviceStorePath = path.join(serviceStoreDirectory, "services.json");
+const discountStorePath = path.join(serviceStoreDirectory, "discounts.json");
+const marketStorePath = path.join(serviceStoreDirectory, "market-listings.json");
+const marketMediaDirectory = path.join(serviceStoreDirectory, "market-media");
+const pointsStorePath = path.join(serviceStoreDirectory, "point-levels.json");
+const orderStorePath = path.join(serviceStoreDirectory, "orders.json");
+const defaultPointLevels = [
+  { name: "برونزي", minimum: 0, perk: "الانضمام إلى برنامج الولاء", gift: "ترحيب خاص" },
+  { name: "نحاسي", minimum: 100, perk: "أولوية متابعة الطلب", gift: "شارة نحاسية" },
+  { name: "فضي", minimum: 500, perk: "مراجعة مجانية واحدة", gift: "شارة فضية" },
+  { name: "ذهبي", minimum: 1000, perk: "أولوية في الرد", gift: "هدية رقمية" },
+  { name: "بلاتيني", minimum: 2500, perk: "خصم خاص على الخدمات", gift: "قالب أكاديمي مجاني" },
+  { name: "زمردي", minimum: 5000, perk: "أولوية تنفيذ", gift: "حزمة قوالب" },
+  { name: "ماسي", minimum: 10000, perk: "مراجعتان مجانيتان", gift: "هدية أكاديمية" },
+  { name: "ياقوتي", minimum: 25000, perk: "خصم مميز على الخدمات", gift: "رصيد خدمة مجاني" },
+  { name: "سفير", minimum: 50000, perk: "دعم مباشر وأولوية قصوى", gift: "هدية مميزة من المنقذ" },
+  { name: "نخبة", minimum: 100000, perk: "مزايا حصرية للخدمات", gift: "رصيد خدمات خاص" },
+  { name: "متفوق", minimum: 250000, perk: "تنفيذ أولوية لجميع الطلبات", gift: "باقة خدمات مجانية" },
+  { name: "أسطوري", minimum: 500000, perk: "امتيازات مخصصة", gift: "هدية خاصة من المشرف" },
+  { name: "مليون", minimum: 1000000, perk: "كامل امتيازات البرنامج", gift: "الجائزة الكبرى" },
+];
 let serviceWriteQueue = Promise.resolve();
 let serviceStoreInitialization;
 
@@ -41,23 +61,6 @@ const adminActionLimiter = rateLimit({
   standardHeaders: "draft-8",
   legacyHeaders: false,
 });
-
-function configuredWooCommerce() {
-  const baseUrl = process.env.WOOCOMMERCE_BASE_URL?.trim().replace(/\/+$/, "");
-  const consumerKey = process.env.WOOCOMMERCE_CONSUMER_KEY?.trim();
-  const consumerSecret = process.env.WOOCOMMERCE_CONSUMER_SECRET?.trim();
-  const gatewayId = process.env.WOOCOMMERCE_WAYL_GATEWAY_ID?.trim();
-
-  if (!baseUrl || !consumerKey || !consumerSecret || !gatewayId) return null;
-
-  try {
-    if (new URL(baseUrl).protocol !== "https:") return null;
-  } catch {
-    return null;
-  }
-
-  return { baseUrl, consumerKey, consumerSecret, gatewayId };
-}
 
 function configuredSupabase() {
   const baseUrl = process.env.SUPABASE_URL?.trim().replace(/\/+$/, "");
@@ -96,13 +99,6 @@ async function getSupabaseUser(config, accessToken) {
   } catch {
     return null;
   }
-}
-
-async function authenticatedSupabaseUser(request) {
-  const config = configuredSupabase();
-  const token = request.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
-  if (!config || !token) return false;
-  return Boolean(await getSupabaseUser(config, token));
 }
 
 async function requireAdmin(request, response, next) {
@@ -174,6 +170,81 @@ async function updateServiceStore(update) {
   });
   serviceWriteQueue = operation.catch(() => {});
   return operation;
+}
+
+async function readDiscountStore() {
+  try {
+    const discounts = JSON.parse(await readFile(discountStorePath, "utf8"));
+    if (!Array.isArray(discounts)) throw new Error("Discount store must contain an array.");
+    return discounts;
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    await mkdir(path.dirname(discountStorePath), { recursive: true });
+    await writeFile(discountStorePath, "[]\n", { flag: "wx" }).catch((writeError) => {
+      if (writeError?.code !== "EEXIST") throw writeError;
+    });
+    const discounts = JSON.parse(await readFile(discountStorePath, "utf8"));
+    if (!Array.isArray(discounts)) throw new Error("Discount store must contain an array.");
+    return discounts;
+  }
+}
+
+async function updateDiscountStore(update) {
+  const operation = serviceWriteQueue.then(async () => {
+    const discounts = await readDiscountStore();
+    const result = await update(discounts);
+    await writeServiceStoreToPath(discountStorePath, discounts);
+    return result;
+  });
+  serviceWriteQueue = operation.catch(() => {});
+  return operation;
+}
+
+async function readOrderStore() {
+  try {
+    const orders = JSON.parse(await readFile(orderStorePath, "utf8"));
+    if (!Array.isArray(orders)) throw new Error("Order store must contain an array.");
+    return orders;
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    await writeServiceStoreToPath(orderStorePath, []);
+    return [];
+  }
+}
+
+async function writeServiceStoreToPath(storePath, value) {
+  await mkdir(path.dirname(storePath), { recursive: true });
+  const temporaryPath = `${storePath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx" });
+    await rename(temporaryPath, storePath);
+  } catch (error) {
+    await unlink(temporaryPath).catch(() => {});
+    throw error;
+  }
+}
+
+function validateDiscountPayload(body, partial = false) {
+  const payload = {};
+  for (const field of ["code", "type", "value", "usageLimit", "startsAt", "expiresAt", "isActive"]) {
+    if (field in (body ?? {})) payload[field] = body[field];
+  }
+  if (!partial && ["code", "type", "value", "usageLimit", "isActive"].some((field) => !(field in payload))) {
+    return { error: "أكمل بيانات كود الخصم." };
+  }
+  if ("code" in payload) {
+    if (typeof payload.code !== "string" || !/^[A-Z0-9_-]{3,24}$/.test(payload.code.trim().toUpperCase())) return { error: "رمز الخصم يجب أن يتكون من 3 إلى 24 حرفاً أو رقماً." };
+    payload.code = payload.code.trim().toUpperCase();
+  }
+  if ("type" in payload && !["fixed", "percentage"].includes(payload.type)) return { error: "نوع الخصم غير صالح." };
+  if ("value" in payload && (!Number.isSafeInteger(payload.value) || payload.value < 1 || (payload.type === "percentage" && payload.value > 100))) return { error: "قيمة الخصم غير صالحة." };
+  if ("usageLimit" in payload && payload.usageLimit !== null && (!Number.isSafeInteger(payload.usageLimit) || payload.usageLimit < 1 || payload.usageLimit > 1000000)) return { error: "حد الاستخدام غير صالح." };
+  for (const field of ["startsAt", "expiresAt"]) {
+    if (field in payload && payload[field] !== null && (typeof payload[field] !== "string" || !Number.isFinite(Date.parse(payload[field])))) return { error: "تاريخ صلاحية الكود غير صالح." };
+  }
+  if ("startsAt" in payload && "expiresAt" in payload && payload.startsAt && payload.expiresAt && Date.parse(payload.startsAt) >= Date.parse(payload.expiresAt)) return { error: "تاريخ الانتهاء يجب أن يأتي بعد تاريخ البدء." };
+  if ("isActive" in payload && typeof payload.isActive !== "boolean") return { error: "حالة الكود غير صالحة." };
+  return { payload };
 }
 
 function validateServicePayload(body, partial = false) {
@@ -283,33 +354,270 @@ app.patch("/api/admin/services/:serviceId", adminActionLimiter, requireAdmin, ex
   }
 });
 
-function productMap() {
+app.get("/api/admin/discounts", adminActionLimiter, requireAdmin, async (_request, response) => {
   try {
-    const value = JSON.parse(process.env.WOOCOMMERCE_PRODUCT_MAP || "{}");
-    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+    const discounts = await readDiscountStore();
+    discounts.sort((left, right) => right.createdAt.localeCompare(left.createdAt));
+    return response.json({ discounts });
   } catch {
-    return {};
+    return response.status(503).json({ error: "تعذر تحميل أكواد الخصم من التخزين الدائم." });
+  }
+});
+
+app.post("/api/admin/discounts", adminActionLimiter, requireAdmin, express.json({ limit: "8kb" }), async (request, response) => {
+  const validated = validateDiscountPayload(request.body);
+  if (validated.error) return response.status(400).json({ error: validated.error });
+  try {
+    const discount = await updateDiscountStore((discounts) => {
+      if (discounts.some((item) => item.code === validated.payload.code)) return null;
+      const created = { id: randomUUID(), usedCount: 0, createdAt: new Date().toISOString(), ...validated.payload };
+      discounts.push(created);
+      return created;
+    });
+    if (!discount) return response.status(409).json({ error: "رمز الخصم مستخدم مسبقاً." });
+    return response.status(201).json(discount);
+  } catch {
+    return response.status(503).json({ error: "تعذر حفظ كود الخصم في التخزين الدائم." });
+  }
+});
+
+app.patch("/api/admin/discounts/:discountId", adminActionLimiter, requireAdmin, express.json({ limit: "8kb" }), async (request, response) => {
+  const { discountId } = request.params;
+  if (!/^[0-9a-f-]{36}$/i.test(discountId)) return response.status(400).json({ error: "معرّف الكود غير صالح." });
+  const validated = validateDiscountPayload(request.body, true);
+  if (validated.error) return response.status(400).json({ error: validated.error });
+  if (!Object.keys(validated.payload).length) return response.status(400).json({ error: "لا توجد تغييرات لحفظها." });
+  try {
+    const discount = await updateDiscountStore((discounts) => {
+      if (validated.payload.code && discounts.some((item) => item.code === validated.payload.code && item.id !== discountId)) return "duplicate";
+      const current = discounts.find((item) => item.id === discountId);
+      if (!current) return null;
+      Object.assign(current, validated.payload, { updatedAt: new Date().toISOString() });
+      return current;
+    });
+    if (discount === "duplicate") return response.status(409).json({ error: "رمز الخصم مستخدم مسبقاً." });
+    if (!discount) return response.status(404).json({ error: "كود الخصم غير موجود." });
+    return response.json(discount);
+  } catch {
+    return response.status(503).json({ error: "تعذر تعديل كود الخصم في التخزين الدائم." });
+  }
+});
+
+app.delete("/api/admin/discounts/:discountId", adminActionLimiter, requireAdmin, async (request, response) => {
+  const { discountId } = request.params;
+  try {
+    const removed = await updateDiscountStore((discounts) => {
+      const index = discounts.findIndex((item) => item.id === discountId);
+      return index < 0 ? false : discounts.splice(index, 1).length > 0;
+    });
+    if (!removed) return response.status(404).json({ error: "كود الخصم غير موجود." });
+    return response.status(204).end();
+  } catch {
+    return response.status(503).json({ error: "تعذر حذف كود الخصم من التخزين الدائم." });
+  }
+});
+
+app.post("/api/discounts/validate", apiLimiter, express.json({ limit: "4kb" }), async (request, response) => {
+  const code = typeof request.body?.code === "string" ? request.body.code.trim().toUpperCase() : "";
+  const subtotal = request.body?.subtotal;
+  if (!/^[A-Z0-9_-]{3,24}$/.test(code) || !Number.isSafeInteger(subtotal) || subtotal < 0) return response.status(400).json({ valid: false, message: "بيانات التحقق من الخصم غير صالحة." });
+  try {
+    const discounts = await readDiscountStore();
+    const discount = discounts.find((item) => item.code === code);
+    const now = Date.now();
+    if (!discount || !discount.isActive || (discount.usageLimit !== null && discount.usedCount >= discount.usageLimit) || (discount.startsAt && Date.parse(discount.startsAt) > now) || (discount.expiresAt && Date.parse(discount.expiresAt) <= now)) {
+      return response.status(400).json({ valid: false, message: "الكود غير صالح أو انتهى عدد استخداماته." });
+    }
+    return response.json({ valid: true, type: discount.type, value: discount.value });
+  } catch {
+    return response.status(503).json({ valid: false, message: "تعذر التحقق من كود الخصم." });
+  }
+});
+
+async function readPointLevels() {
+  try {
+    const levels = JSON.parse(await readFile(pointsStorePath, "utf8"));
+    if (!Array.isArray(levels)) throw new Error("Point-level store must contain an array.");
+    return levels;
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+    await writeServiceStoreToPath(pointsStorePath, defaultPointLevels);
+    return defaultPointLevels;
   }
 }
 
-function validPhone(phone) {
-  return /^\+?\d[\d\s()-]{7,17}$/.test(phone);
-}
+app.get("/api/points/levels", async (_request, response) => {
+  try {
+    return response.json({ levels: await readPointLevels() });
+  } catch {
+    return response.status(503).json({ error: "تعذر تحميل مراحل النقاط." });
+  }
+});
 
-async function wooRequest(config, resource, options = {}) {
-  const response = await fetch(`${config.baseUrl}/wp-json/wc/v3/${resource}`, {
-    ...options,
-    headers: {
-      Authorization: `Basic ${Buffer.from(`${config.consumerKey}:${config.consumerSecret}`).toString("base64")}`,
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-    signal: AbortSignal.timeout(15000),
-  });
+app.get("/api/admin/points/levels", adminActionLimiter, requireAdmin, async (_request, response) => {
+  try {
+    return response.json({ levels: await readPointLevels() });
+  } catch {
+    return response.status(503).json({ error: "تعذر تحميل مراحل النقاط." });
+  }
+});
 
-  if (!response.ok) throw new Error("WooCommerce request failed");
-  return response.json();
-}
+app.put("/api/admin/points/levels", adminActionLimiter, requireAdmin, express.json({ limit: "24kb" }), async (request, response) => {
+  const levels = request.body?.levels;
+  if (!Array.isArray(levels) || levels.length < 2 || levels.length > 30) return response.status(400).json({ error: "أضف من مرحلتين إلى 30 مرحلة." });
+  let previousMinimum = -1;
+  for (const level of levels) {
+    if (!level || typeof level.name !== "string" || !level.name.trim() || level.name.trim().length > 40 ||
+      !Number.isSafeInteger(level.minimum) || level.minimum < 0 || level.minimum > 1000000 || level.minimum <= previousMinimum ||
+      typeof level.perk !== "string" || level.perk.trim().length > 300 ||
+      typeof level.gift !== "string" || level.gift.trim().length > 300) {
+      return response.status(400).json({ error: "تحقق من أسماء المراحل ونقاطها وامتيازاتها وهداياها؛ النقاط تصاعدية حتى مليون." });
+    }
+    previousMinimum = level.minimum;
+  }
+  if (levels[0].minimum !== 0 || levels.at(-1).minimum !== 1000000) return response.status(400).json({ error: "يجب أن تبدأ المرحلة الأولى من صفر وتنتهي الأخيرة عند مليون نقطة." });
+  const normalized = levels.map((level) => ({ name: level.name.trim(), minimum: level.minimum, perk: level.perk.trim(), gift: level.gift.trim() }));
+  try {
+    const operation = serviceWriteQueue.then(() => writeServiceStoreToPath(pointsStorePath, normalized));
+    serviceWriteQueue = operation.catch(() => {});
+    await operation;
+    return response.json({ levels: normalized });
+  } catch {
+    return response.status(503).json({ error: "تعذر حفظ مراحل النقاط في التخزين الدائم." });
+  }
+});
+
+app.get("/api/market/listings", async (_request, response) => {
+  try {
+    const listings = JSON.parse(await readFile(marketStorePath, "utf8"));
+    if (!Array.isArray(listings)) throw new Error("Marketplace store must contain an array.");
+    return response.json({ listings: listings.sort((left, right) => right.createdAt.localeCompare(left.createdAt)) });
+  } catch (error) {
+    if (error?.code === "ENOENT") return response.json({ listings: [] });
+    return response.status(503).json({ error: "تعذر تحميل إعلانات السوق من التخزين الدائم." });
+  }
+});
+
+app.post("/api/orders/whatsapp", apiLimiter, express.json({ limit: "12kb" }), async (request, response) => {
+  const body = request.body ?? {};
+  const phone = normalizeIraqiPhone(body.phone);
+  const requiredText = [
+    [body.serviceTitle, 200], [body.fullName, 100], [body.university, 120],
+    [body.college, 120], [body.department, 120], [body.title, 300],
+  ];
+  if (!phone || requiredText.some(([value, maximum]) => typeof value !== "string" || !value.trim() || value.length > maximum) ||
+    !Number.isSafeInteger(body.totalIqd) || body.totalIqd < 0 || body.totalIqd > 2147483647) {
+    return response.status(400).json({ error: "تحقق من الاسم ورقم الهاتف والبيانات الجامعية وعنوان الطلب." });
+  }
+  const optionalText = (value, maximum) => typeof value === "string" ? value.trim().slice(0, maximum) : "";
+  const createdAt = new Date().toISOString();
+  const order = {
+    id: randomUUID(),
+    order_number: `WA-${createdAt.slice(0, 10).replaceAll("-", "")}-${randomUUID().slice(0, 8).toUpperCase()}`,
+    order_type: "whatsapp_request",
+    service_id: optionalText(body.serviceId, 80),
+    service_title: body.serviceTitle.trim(),
+    full_name: body.fullName.trim(),
+    student_phone: phone,
+    university: body.university.trim(),
+    college: body.college.trim(),
+    department: body.department.trim(),
+    supervisor: optionalText(body.supervisor, 120),
+    report_title: body.title.trim(),
+    notes: optionalText(body.notes, 2000),
+    variant: optionalText(body.variant, 300),
+    template: optionalText(body.template, 200),
+    preferred_color: optionalText(body.color, 80),
+    speed: optionalText(body.speed, 80),
+    discount_code: optionalText(body.discountCode, 24),
+    points_discount_iqd: Number.isSafeInteger(body.pointsDiscountIqd) ? Math.max(0, Math.min(body.pointsDiscountIqd, body.totalIqd)) : 0,
+    total_iqd: body.totalIqd,
+    status: "transferred_to_whatsapp",
+    payment_status: "not_applicable",
+    created_at: createdAt,
+  };
+
+  try {
+    const operation = serviceWriteQueue.then(async () => {
+      const orders = await readOrderStore();
+      orders.push(order);
+      await writeServiceStoreToPath(orderStorePath, orders);
+    });
+    serviceWriteQueue = operation.catch(() => {});
+    await operation;
+    return response.status(201).json({ order: { id: order.id, orderNumber: order.order_number, status: order.status, createdAt: order.created_at } });
+  } catch {
+    return response.status(503).json({ error: "تعذر حفظ الطلب على التخزين الدائم؛ لم يتم تحويلك إلى واتساب." });
+  }
+});
+
+app.post("/api/market/listings", apiLimiter, express.json({ limit: "14mb" }), async (request, response) => {
+  const body = request.body ?? {};
+  const sellerPhone = normalizeIraqiPhone(body.sellerPhone);
+  const allowedKinds = ["منتج", "خدمة"];
+  if (
+    typeof body.title !== "string" || body.title.trim().length < 3 || body.title.length > 120 ||
+    typeof body.description !== "string" || body.description.trim().length < 10 || body.description.length > 3000 ||
+    !Number.isSafeInteger(body.price) || body.price < 0 || body.price > 2147483647 ||
+    typeof body.category !== "string" || body.category.length > 100 ||
+    typeof body.location !== "string" || body.location.trim().length < 2 || body.location.length > 160 ||
+    !allowedKinds.includes(body.kind) ||
+    typeof body.seller !== "string" || body.seller.trim().length < 2 || body.seller.length > 100 ||
+    !sellerPhone ||
+    !body.media || typeof body.media.data !== "string" || typeof body.media.type !== "string"
+  ) return response.status(400).json({ error: "أكمل بيانات الإعلان ورقم واتساب صالحاً وأرفق صورة أو فيديو." });
+
+  const allowedMediaTypes = new Map([
+    ["image/jpeg", "jpg"], ["image/png", "png"], ["image/webp", "webp"], ["image/gif", "gif"],
+    ["video/mp4", "mp4"], ["video/webm", "webm"], ["video/quicktime", "mov"],
+  ]);
+  const extension = allowedMediaTypes.get(body.media.type);
+  const dataMatch = body.media.data.match(/^data:([^;,]+);base64,([A-Za-z0-9+/]*={0,2})$/);
+  if (!extension || !dataMatch || dataMatch[1] !== body.media.type) return response.status(400).json({ error: "نوع ملف الوسائط غير مدعوم." });
+  const mediaBytes = Buffer.from(dataMatch[2], "base64");
+  if (mediaBytes.length < 1 || mediaBytes.length > 10 * 1024 * 1024 || mediaBytes.toString("base64") !== dataMatch[2]) return response.status(413).json({ error: "حجم الصورة أو الفيديو يجب ألا يتجاوز 10 ميغابايت." });
+
+  try {
+    const id = randomUUID();
+    const mediaName = `${id}.${extension}`;
+    await mkdir(marketMediaDirectory, { recursive: true });
+    await writeFile(path.join(marketMediaDirectory, mediaName), mediaBytes, { flag: "wx" });
+    const listing = {
+      id,
+      title: body.title.trim(),
+      price: body.price,
+      tag: typeof body.condition === "string" ? body.condition.slice(0, 40) : typeof body.pricingUnit === "string" ? body.pricingUnit.slice(0, 40) : "متاح",
+      style: "",
+      category: body.category,
+      kind: body.kind,
+      mediaType: body.media.type.startsWith("video/") ? "فيديو" : "صورة",
+      description: body.description.trim(),
+      location: body.location.trim(),
+      seller: body.seller.trim(),
+      sellerPhone,
+      createdAt: new Date().toISOString(),
+      mediaUrl: `/market-media/${mediaName}`,
+    };
+    const operation = serviceWriteQueue.then(async () => {
+      let listings = [];
+      try {
+        listings = JSON.parse(await readFile(marketStorePath, "utf8"));
+        if (!Array.isArray(listings)) throw new Error("Marketplace store must contain an array.");
+      } catch (error) {
+        if (error?.code !== "ENOENT") throw error;
+      }
+      listings.push(listing);
+      await writeServiceStoreToPath(marketStorePath, listings);
+    });
+    serviceWriteQueue = operation.catch(() => {});
+    await operation;
+    return response.status(201).json({ listing });
+  } catch {
+    return response.status(503).json({ error: "تعذر حفظ الإعلان أو وسائطه في التخزين الدائم." });
+  }
+});
+
+app.use("/market-media", express.static(marketMediaDirectory, { fallthrough: false, immutable: true, maxAge: "1y" }));
 
 app.get("/healthz", (_request, response) => response.status(200).json({ status: "ok" }));
 
@@ -349,6 +657,12 @@ app.post("/api/admin/login", adminLoginLimiter, express.json({ limit: "8kb" }), 
 
 app.get("/api/admin/orders", adminActionLimiter, requireAdmin, async (request, response) => {
   const { config, token } = request.adminSession;
+  let whatsappOrders;
+  try {
+    whatsappOrders = await readOrderStore();
+  } catch {
+    return response.status(503).json({ error: "تعذر تحميل الطلبات المحولة إلى واتساب من التخزين الدائم." });
+  }
   const query = new URLSearchParams({
     select: "id,order_number,service_title,total_iqd,status,payment_status,payment_method,payment_reference,paid_at,created_at",
     payment_status: "eq.pending",
@@ -361,10 +675,22 @@ app.get("/api/admin/orders", adminActionLimiter, requireAdmin, async (request, r
       headers: { apikey: config.anonKey, Authorization: `Bearer ${token}` },
       signal: AbortSignal.timeout(10000),
     });
-    if (!result.ok) return response.status(503).json({ error: "تعذر تحميل الطلبات؛ تحقق من تطبيق ترحيل قاعدة البيانات." });
-    return response.json({ orders: await result.json() });
+    if (!result.ok) {
+      return response.json({
+        orders: whatsappOrders,
+        warning: "تعذر تحميل طلبات الدفع من Supabase؛ عُرضت الطلبات المحولة إلى واتساب فقط.",
+      });
+    }
+    const databaseOrders = await result.json();
+    const orders = [...whatsappOrders, ...databaseOrders]
+      .sort((left, right) => right.created_at.localeCompare(left.created_at))
+      .slice(0, 100);
+    return response.json({ orders });
   } catch {
-    return response.status(503).json({ error: "تعذر الاتصال بقاعدة البيانات." });
+    return response.json({
+      orders: whatsappOrders,
+      warning: "تعذر الاتصال بقاعدة بيانات الدفع؛ عُرضت الطلبات المحولة إلى واتساب فقط.",
+    });
   }
 });
 
@@ -383,6 +709,13 @@ app.post("/api/admin/orders/:orderId/confirm-offline-payment", adminActionLimite
   }
   if (reference !== undefined && reference !== null && (typeof reference !== "string" || reference.length > 120)) {
     return response.status(400).json({ error: "رقم الإيصال أو التحويل غير صالح." });
+  }
+  try {
+    if ((await readOrderStore()).some((order) => order.id === orderId)) {
+      return response.status(409).json({ error: "هذا الطلب أُحيل إلى واتساب؛ لا يُسجّل كطلب دفع من هذه اللوحة." });
+    }
+  } catch {
+    return response.status(503).json({ error: "تعذر التحقق من نوع الطلب." });
   }
 
   try {
@@ -414,108 +747,6 @@ app.post("/api/admin/orders/:orderId/confirm-offline-payment", adminActionLimite
   } catch {
     return response.status(503).json({ error: "تعذر الاتصال بقاعدة البيانات." });
   }
-});
-
-app.post("/api/payments/wayl/checkout", apiLimiter, express.json({ limit: "16kb" }), async (request, response) => {
-  if (!configuredSupabase()) {
-    return response.status(503).json({ error: "Student authentication is not configured on the server" });
-  }
-  if (!(await authenticatedSupabaseUser(request))) {
-    return response.status(401).json({ error: "A valid student session is required" });
-  }
-
-  const config = configuredWooCommerce();
-  if (!config) {
-    return response.status(503).json({ error: "Wayl checkout is not configured on the server" });
-  }
-
-  const { listingId, customer } = request.body ?? {};
-  if (
-    typeof listingId !== "string" || listingId.length > 80 ||
-    !customer || typeof customer !== "object" ||
-    typeof customer.fullName !== "string" || customer.fullName.trim().length < 2 || customer.fullName.length > 100 ||
-    typeof customer.phone !== "string" || !validPhone(customer.phone)
-  ) {
-    return response.status(400).json({ error: "Invalid checkout details" });
-  }
-
-  const mappedProductId = Number(productMap()[listingId]);
-  if (!Number.isSafeInteger(mappedProductId) || mappedProductId < 1) {
-    return response.status(404).json({ error: "This listing is not available for online checkout" });
-  }
-
-  try {
-    const product = await wooRequest(config, `products/${mappedProductId}`);
-    const price = Number(product.price);
-    if (product.status !== "publish" || product.purchasable === false || !Number.isSafeInteger(price) || price <= 0) {
-      return response.status(409).json({ error: "This product cannot be purchased" });
-    }
-
-    const name = customer.fullName.trim().split(/\s+/);
-    const order = await wooRequest(config, "orders", {
-      method: "POST",
-      body: JSON.stringify({
-        payment_method: config.gatewayId,
-        payment_method_title: "Wayl",
-        set_paid: false,
-        currency: "IQD",
-        billing: {
-          first_name: name[0],
-          last_name: name.slice(1).join(" "),
-          phone: customer.phone.trim(),
-        },
-        customer_note: typeof customer.delivery === "string" ? customer.delivery.slice(0, 500) : "",
-        line_items: [{ product_id: mappedProductId, quantity: 1 }],
-        meta_data: [{ key: "al_monqith_listing_id", value: listingId }],
-      }),
-    });
-
-    const checkoutUrl = new URL(order.payment_url);
-    const lineItem = Array.isArray(order.line_items) && order.line_items.length === 1 ? order.line_items[0] : null;
-    if (
-      order.currency !== "IQD" || !lineItem || lineItem.product_id !== mappedProductId ||
-      Number(lineItem.total) !== price ||
-      checkoutUrl.protocol !== "https:" || checkoutUrl.host !== new URL(config.baseUrl).host
-    ) {
-      return response.status(502).json({ error: "WooCommerce returned an invalid payment order" });
-    }
-
-    return response.status(201).json({ checkoutUrl: checkoutUrl.toString() });
-  } catch {
-    return response.status(502).json({ error: "Unable to create a Wayl checkout right now" });
-  }
-});
-
-app.post("/api/webhooks/woocommerce", apiLimiter, express.raw({ type: "application/json", limit: "256kb" }), async (request, response) => {
-  const secret = process.env.WOOCOMMERCE_WEBHOOK_SECRET;
-  const signature = request.get("x-wc-webhook-signature");
-  if (!secret || !signature || !Buffer.isBuffer(request.body)) {
-    return response.status(503).json({ error: "Webhook verification is not configured" });
-  }
-
-  const expected = createHmac("sha256", secret).update(request.body).digest();
-  let supplied;
-  try {
-    supplied = Buffer.from(signature, "base64");
-  } catch {
-    return response.status(401).json({ error: "Invalid webhook signature" });
-  }
-  if (supplied.length !== expected.length || !timingSafeEqual(expected, supplied)) {
-    return response.status(401).json({ error: "Invalid webhook signature" });
-  }
-
-  let event;
-  try {
-    event = JSON.parse(request.body.toString("utf8"));
-  } catch {
-    return response.status(400).json({ error: "Invalid webhook payload" });
-  }
-
-  if (!Number.isSafeInteger(event.id) || event.currency !== "IQD" || !event.status) {
-    return response.status(400).json({ error: "Invalid WooCommerce order event" });
-  }
-
-  return response.status(202).json({ accepted: true, orderId: event.id });
 });
 
 app.use(express.static(distDirectory, { index: false, fallthrough: true }));
