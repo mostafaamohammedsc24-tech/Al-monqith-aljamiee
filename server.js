@@ -41,6 +41,10 @@ let serviceWriteQueue = Promise.resolve();
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
 app.use(helmet({ contentSecurityPolicy: false }));
+app.use("/api", (_request, response, next) => {
+  response.set("Cache-Control", "no-store, max-age=0");
+  next();
+});
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

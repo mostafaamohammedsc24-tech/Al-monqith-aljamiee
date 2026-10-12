@@ -1,4 +1,4 @@
-const CACHE_NAME = "al-monqith-v3";
+const CACHE_NAME = "al-monqith-v4";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/icon-maskable-512.png"];
 
 self.addEventListener("install", (event) => {
@@ -17,7 +17,13 @@ self.addEventListener("activate", (event) => {
 
 self.addEventListener("fetch", (event) => {
   const request = event.request;
-  if (request.method !== "GET" || !request.url.startsWith(self.location.origin)) return;
+  const url = new URL(request.url);
+  if (request.method !== "GET" || url.origin !== self.location.origin) return;
+
+  if (url.pathname.startsWith("/api/")) {
+    event.respondWith(fetch(request, { cache: "no-store" }));
+    return;
+  }
 
   if (request.mode === "navigate") {
     event.respondWith(
