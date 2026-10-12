@@ -143,7 +143,7 @@ export default function AdminPaymentsPage({ onBack, onDashboard, onServices, onD
   return (
     <div className="admin-payments" dir="rtl">
       <header>
-        <div><span>المنقذ الجامعي</span><h1>الطلبات والمدفوعات</h1><p>طلبات العملاء المحفوظة، والطلبات التي تنتظر تسجيل القبض.</p></div>
+        <div><span>المنقذ الجامعي</span><h1>طلبات واتساب المحفوظة</h1><p>قائمة الطلبات المحفوظة على قرص Render الدائم.</p></div>
         <nav aria-label="إدارة المشرف">
           <button className="active" onClick={onDashboard}>المدفوعات</button>
           <button onClick={onServices}>الخدمات</button>
@@ -153,7 +153,7 @@ export default function AdminPaymentsPage({ onBack, onDashboard, onServices, onD
         </nav>
       </header>
       <main>
-        <div className="admin-payments-heading"><div><span>متابعة الطلبات</span><h2>الطلبات المحفوظة</h2></div><button onClick={() => void loadOrders(token)} disabled={loading}>تحديث القائمة</button></div>
+        <div className="admin-payments-heading"><div><span>تخزين Render</span><h2>الطلبات المحفوظة</h2></div><button onClick={() => void loadOrders(token)} disabled={loading}>تحديث القائمة</button></div>
         {status && <p className={`admin-payment-message ${status.startsWith("تم تسجيل") ? "success" : "error"}`} role="status">{status}</p>}
         {loading && !orders.length ? <p className="admin-payments-empty">جارٍ تحميل الطلبات...</p> : orders.length ? (
           <section className="admin-payment-list" aria-label="طلبات بانتظار الدفع">
@@ -180,7 +180,7 @@ export default function AdminPaymentsPage({ onBack, onDashboard, onServices, onD
               </article>
             ))}
           </section>
-        ) : <div className="admin-payments-empty"><strong>لا توجد طلبات بعد</strong><p>ستظهر هنا الطلبات المحفوظة والمحالة إلى واتساب، وطلبات قاعدة البيانات المعلّقة.</p></div>}
+        ) : <div className="admin-payments-empty"><strong>لا توجد طلبات بعد</strong><p>ستظهر هنا الطلبات التي حُفظت على قرص Render وأُحيلت إلى واتساب.</p></div>}
       </main>
     </div>
   );

@@ -8,6 +8,11 @@ configuration. It builds with `pnpm install --frozen-lockfile && pnpm build`,
 starts with `pnpm start`, serves SPA routes, and exposes `/healthz` for health
 checks.
 
+Persistent JSON data uses `SERVICE_STORE_DIR=/var/data`. The server also detects
+Render directly, so storage does not depend on Render having `NODE_ENV` set.
+Existing JSON files under the previous `.data` directory are copied to the
+persistent disk on first access.
+
 ## Admin access and offline payments
 
 Student registration remains saved on the current device by phone number only,

@@ -11,8 +11,10 @@ const app = express();
 const port = Number(process.env.PORT) || 10000;
 const distDirectory = path.join(directory, "dist");
 const serviceSeedPath = path.join(directory, "data", "services.seed.json");
+const isRenderService = Boolean(process.env.RENDER_SERVICE_ID) || process.env.RENDER === "true";
 const serviceStoreDirectory = process.env.SERVICE_STORE_DIR?.trim()
-  || (process.env.NODE_ENV === "production" ? "/var/data" : path.join(directory, ".data"));
+  || (isRenderService || process.env.NODE_ENV === "production" ? "/var/data" : path.join(directory, ".data"));
+const legacyServiceStoreDirectory = path.join(directory, ".data");
 const serviceStorePath = path.join(serviceStoreDirectory, "services.json");
 const discountStorePath = path.join(serviceStoreDirectory, "discounts.json");
 const marketStorePath = path.join(serviceStoreDirectory, "market-listings.json");
@@ -35,7 +37,6 @@ const defaultPointLevels = [
   { name: "مليون", minimum: 1000000, perk: "كامل امتيازات البرنامج", gift: "الجائزة الكبرى" },
 ];
 let serviceWriteQueue = Promise.resolve();
-let serviceStoreInitialization;
 
 app.set("trust proxy", 1);
 app.disable("x-powered-by");
@@ -120,45 +121,49 @@ async function requireAdmin(request, response, next) {
   return next();
 }
 
-async function writeServiceStore(services) {
-  await mkdir(path.dirname(serviceStorePath), { recursive: true });
-  const temporaryPath = `${serviceStorePath}.${process.pid}.${randomUUID()}.tmp`;
+async function writeServiceStoreToPath(storePath, value) {
+  await mkdir(path.dirname(storePath), { recursive: true });
+  const temporaryPath = `${storePath}.${process.pid}.${randomUUID()}.tmp`;
   try {
-    await writeFile(temporaryPath, `${JSON.stringify(services, null, 2)}\n`, { flag: "wx" });
-    await rename(temporaryPath, serviceStorePath);
+    await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx" });
+    await rename(temporaryPath, storePath);
   } catch (error) {
     await unlink(temporaryPath).catch(() => {});
     throw error;
   }
 }
 
-async function readServiceStore() {
-  try {
-    const services = JSON.parse(await readFile(serviceStorePath, "utf8"));
-    if (!Array.isArray(services)) throw new Error("Service store must contain an array.");
-    return services;
-  } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
-    if (!serviceStoreInitialization) {
-      serviceStoreInitialization = (async () => {
-        try {
-          return JSON.parse(await readFile(serviceStorePath, "utf8"));
-        } catch (readError) {
-          if (readError?.code !== "ENOENT") throw readError;
-        }
-        const seed = JSON.parse(await readFile(serviceSeedPath, "utf8"));
-        if (!Array.isArray(seed)) throw new Error("Service seed must contain an array.");
-        await writeServiceStore(seed);
-        return seed;
-      })();
-    }
+async function readPersistentArray(storePath, defaultValue) {
+  const candidates = [storePath];
+  const legacyPath = path.join(legacyServiceStoreDirectory, path.basename(storePath));
+  if (path.resolve(legacyPath) !== path.resolve(storePath)) candidates.push(legacyPath);
+
+  for (const candidate of candidates) {
+    let contents;
     try {
-      return await serviceStoreInitialization;
-    } catch (initializationError) {
-      serviceStoreInitialization = undefined;
-      throw initializationError;
+      contents = await readFile(candidate, "utf8");
+    } catch (error) {
+      if (error?.code === "ENOENT") continue;
+      throw error;
     }
+    const value = JSON.parse(contents);
+    if (!Array.isArray(value)) throw new Error(`${path.basename(storePath)} must contain an array.`);
+    if (candidate !== storePath) await writeServiceStoreToPath(storePath, value);
+    return value;
   }
+
+  const value = typeof defaultValue === "function" ? await defaultValue() : defaultValue;
+  if (!Array.isArray(value)) throw new Error(`${path.basename(storePath)} default must be an array.`);
+  await writeServiceStoreToPath(storePath, value);
+  return value;
+}
+
+async function readServiceStore() {
+  return readPersistentArray(serviceStorePath, async () => {
+    const seed = JSON.parse(await readFile(serviceSeedPath, "utf8"));
+    if (!Array.isArray(seed)) throw new Error("Service seed must contain an array.");
+    return seed;
+  });
 }
 
 async function updateServiceStore(update) {
@@ -173,20 +178,7 @@ async function updateServiceStore(update) {
 }
 
 async function readDiscountStore() {
-  try {
-    const discounts = JSON.parse(await readFile(discountStorePath, "utf8"));
-    if (!Array.isArray(discounts)) throw new Error("Discount store must contain an array.");
-    return discounts;
-  } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
-    await mkdir(path.dirname(discountStorePath), { recursive: true });
-    await writeFile(discountStorePath, "[]\n", { flag: "wx" }).catch((writeError) => {
-      if (writeError?.code !== "EEXIST") throw writeError;
-    });
-    const discounts = JSON.parse(await readFile(discountStorePath, "utf8"));
-    if (!Array.isArray(discounts)) throw new Error("Discount store must contain an array.");
-    return discounts;
-  }
+  return readPersistentArray(discountStorePath, []);
 }
 
 async function updateDiscountStore(update) {
@@ -201,27 +193,7 @@ async function updateDiscountStore(update) {
 }
 
 async function readOrderStore() {
-  try {
-    const orders = JSON.parse(await readFile(orderStorePath, "utf8"));
-    if (!Array.isArray(orders)) throw new Error("Order store must contain an array.");
-    return orders;
-  } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
-    await writeServiceStoreToPath(orderStorePath, []);
-    return [];
-  }
-}
-
-async function writeServiceStoreToPath(storePath, value) {
-  await mkdir(path.dirname(storePath), { recursive: true });
-  const temporaryPath = `${storePath}.${process.pid}.${randomUUID()}.tmp`;
-  try {
-    await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx" });
-    await rename(temporaryPath, storePath);
-  } catch (error) {
-    await unlink(temporaryPath).catch(() => {});
-    throw error;
-  }
+  return readPersistentArray(orderStorePath, []);
 }
 
 function validateDiscountPayload(body, partial = false) {
@@ -435,15 +407,7 @@ app.post("/api/discounts/validate", apiLimiter, express.json({ limit: "4kb" }), 
 });
 
 async function readPointLevels() {
-  try {
-    const levels = JSON.parse(await readFile(pointsStorePath, "utf8"));
-    if (!Array.isArray(levels)) throw new Error("Point-level store must contain an array.");
-    return levels;
-  } catch (error) {
-    if (error?.code !== "ENOENT") throw error;
-    await writeServiceStoreToPath(pointsStorePath, defaultPointLevels);
-    return defaultPointLevels;
-  }
+  return readPersistentArray(pointsStorePath, defaultPointLevels);
 }
 
 app.get("/api/points/levels", async (_request, response) => {
@@ -489,8 +453,7 @@ app.put("/api/admin/points/levels", adminActionLimiter, requireAdmin, express.js
 
 app.get("/api/market/listings", async (_request, response) => {
   try {
-    const listings = JSON.parse(await readFile(marketStorePath, "utf8"));
-    if (!Array.isArray(listings)) throw new Error("Marketplace store must contain an array.");
+    const listings = await readPersistentArray(marketStorePath, []);
     return response.json({ listings: listings.sort((left, right) => right.createdAt.localeCompare(left.createdAt)) });
   } catch (error) {
     if (error?.code === "ENOENT") return response.json({ listings: [] });
@@ -599,13 +562,7 @@ app.post("/api/market/listings", apiLimiter, express.json({ limit: "14mb" }), as
       mediaUrl: `/market-media/${mediaName}`,
     };
     const operation = serviceWriteQueue.then(async () => {
-      let listings = [];
-      try {
-        listings = JSON.parse(await readFile(marketStorePath, "utf8"));
-        if (!Array.isArray(listings)) throw new Error("Marketplace store must contain an array.");
-      } catch (error) {
-        if (error?.code !== "ENOENT") throw error;
-      }
+      const listings = await readPersistentArray(marketStorePath, []);
       listings.push(listing);
       await writeServiceStoreToPath(marketStorePath, listings);
     });
@@ -656,41 +613,12 @@ app.post("/api/admin/login", adminLoginLimiter, express.json({ limit: "8kb" }), 
 });
 
 app.get("/api/admin/orders", adminActionLimiter, requireAdmin, async (request, response) => {
-  const { config, token } = request.adminSession;
-  let whatsappOrders;
   try {
-    whatsappOrders = await readOrderStore();
+    const orders = await readOrderStore();
+    orders.sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
+    return response.json({ orders: orders.slice(0, 100) });
   } catch {
-    return response.status(503).json({ error: "تعذر تحميل الطلبات المحولة إلى واتساب من التخزين الدائم." });
-  }
-  const query = new URLSearchParams({
-    select: "id,order_number,service_title,total_iqd,status,payment_status,payment_method,payment_reference,paid_at,created_at",
-    payment_status: "eq.pending",
-    order: "created_at.desc",
-    limit: "100",
-  });
-
-  try {
-    const result = await fetch(`${config.baseUrl}/rest/v1/orders?${query}`, {
-      headers: { apikey: config.anonKey, Authorization: `Bearer ${token}` },
-      signal: AbortSignal.timeout(10000),
-    });
-    if (!result.ok) {
-      return response.json({
-        orders: whatsappOrders,
-        warning: "تعذر تحميل طلبات الدفع من Supabase؛ عُرضت الطلبات المحولة إلى واتساب فقط.",
-      });
-    }
-    const databaseOrders = await result.json();
-    const orders = [...whatsappOrders, ...databaseOrders]
-      .sort((left, right) => right.created_at.localeCompare(left.created_at))
-      .slice(0, 100);
-    return response.json({ orders });
-  } catch {
-    return response.json({
-      orders: whatsappOrders,
-      warning: "تعذر الاتصال بقاعدة بيانات الدفع؛ عُرضت الطلبات المحولة إلى واتساب فقط.",
-    });
+    return response.status(503).json({ error: "تعذر تحميل الطلبات من قرص Render الدائم." });
   }
 });
 
