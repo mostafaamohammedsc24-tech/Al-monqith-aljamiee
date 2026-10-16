@@ -22,14 +22,13 @@ type Props = {
   onBack: () => void;
   onPayments: () => void;
   onDiscounts: () => void;
-  onLatex: () => void;
 };
 
 const tokenKey = "najda-admin-token";
 const emptyForm = { title: "", description: "", category: "", basePrice: "", duration: "", features: "", variants: "", delivery: "رقمي" as ServiceRecord["delivery"], provider: "مقدم خدمة" as ServiceRecord["provider"], templateGroup: "" as string, isActive: false, showPrice: true };
 const formatIqd = (amount: number) => new Intl.NumberFormat("ar-IQ").format(amount);
 
-export default function AdminServicesPage({ onBack, onPayments, onDiscounts, onLatex }: Props) {
+export default function AdminServicesPage({ onBack, onPayments, onDiscounts }: Props) {
   const [token, setToken] = useState(() => sessionStorage.getItem(tokenKey) || "");
   const [services, setServices] = useState<ServiceRecord[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -166,6 +165,32 @@ export default function AdminServicesPage({ onBack, onPayments, onDiscounts, onL
     }
   }
 
+  async function deleteService(service: ServiceRecord) {
+    if (!token || !window.confirm(`هل تريد حذف خدمة «${service.title}» نهائيًا؟`)) return;
+    setLoading(true);
+    setMessage("");
+    try {
+      const response = await fetch(`/api/admin/services/${encodeURIComponent(service.id)}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { error?: string } | null;
+        if (response.status === 401 || response.status === 403) {
+          sessionStorage.removeItem(tokenKey);
+          setToken("");
+        }
+        throw new Error(result?.error || "تعذر حذف الخدمة.");
+      }
+      setServices((current) => current.filter((item) => item.id !== service.id));
+      setMessage("تم حذف الخدمة من التخزين الدائم.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "تعذر حذف الخدمة.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   if (!token) {
     return (
       <main className="admin-services-login" dir="rtl">
@@ -187,7 +212,7 @@ export default function AdminServicesPage({ onBack, onPayments, onDiscounts, onL
         <div><span>المنقذ الجامعي</span><h1>إدارة الخدمات</h1></div>
         <nav aria-label="إدارة المشرف">
           <button onClick={onPayments}>المدفوعات</button><button className="active">الخدمات</button>
-          <button onClick={onDiscounts}>الخصومات</button><button onClick={onLatex}>مختبر LaTeX</button>
+          <button onClick={onDiscounts}>الخصومات</button>
           <button onClick={onBack}>الموقع</button>
           <button onClick={() => { sessionStorage.removeItem(tokenKey); setToken(""); }}>خروج</button>
         </nav>
@@ -224,7 +249,8 @@ export default function AdminServicesPage({ onBack, onPayments, onDiscounts, onL
               <article key={service.id}>
                 <div><small>{service.category} · {service.is_active ? "منشورة" : "مسودة"}</small><h3>{service.title}</h3><p>{service.description}</p></div>
                 <strong>{service.show_price ? `${formatIqd(service.base_price_iqd)} د.ع` : "السعر مخفي"}</strong>
-                <button type="button" onClick={() => editService(service)}>تعديل</button>
+                <button type="button" onClick={() => editService(service)} disabled={loading}>تعديل</button>
+                <button className="admin-services-delete" type="button" onClick={() => void deleteService(service)} disabled={loading}>حذف</button>
               </article>
             )) : <p className="admin-services-empty">لا توجد خدمات محفوظة بعد. أضف الخدمة الأولى أعلاه.</p>}
           </section>

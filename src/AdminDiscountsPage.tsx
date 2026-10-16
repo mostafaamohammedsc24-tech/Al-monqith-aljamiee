@@ -15,7 +15,14 @@ type DiscountCode = {
 
 const API = import.meta.env.VITE_ADMIN_DISCOUNTS_ENDPOINT || "/api/admin/discounts";
 
-export default function AdminDiscountsPage({ onBack, onLatex }: { onBack: () => void; onLatex: () => void }) {
+async function readJson<T>(response: Response): Promise<T> {
+  if (!response.headers.get("content-type")?.includes("application/json")) {
+    throw new Error(`استجابة الخادم غير صالحة (HTTP ${response.status})؛ لم يتم تغيير البيانات.`);
+  }
+  return response.json() as Promise<T>;
+}
+
+export default function AdminDiscountsPage({ onBack, onRewards }: { onBack: () => void; onRewards: () => void }) {
   const [token, setToken] = useState(() => sessionStorage.getItem("najda-admin-token") || "");
   const [discounts, setDiscounts] = useState<DiscountCode[]>([]);
   const [type, setType] = useState<DiscountCode["type"]>("percentage");
@@ -46,7 +53,7 @@ export default function AdminDiscountsPage({ onBack, onLatex }: { onBack: () => 
     setLoading(true);
     try {
       const response = await request();
-      const data = await response.json() as { discounts?: DiscountCode[] } | DiscountCode[];
+      const data = await readJson<{ discounts?: DiscountCode[] } | DiscountCode[]>(response);
       setDiscounts(Array.isArray(data) ? data : data.discounts || []);
       setStatus("");
     } catch (error) {
@@ -63,7 +70,7 @@ export default function AdminDiscountsPage({ onBack, onLatex }: { onBack: () => 
     try {
       const response = await fetch(import.meta.env.VITE_ADMIN_LOGIN_ENDPOINT || "/api/admin/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone: data.get("phone"), password: data.get("password") }) });
       if (!response.ok) throw new Error("بيانات الدخول غير صحيحة أو الخادم غير متصل.");
-      const result = await response.json() as { accessToken?: string };
+      const result = await readJson<{ accessToken?: string }>(response);
       if (!result.accessToken) throw new Error("لم يُرجع الخادم جلسة صالحة.");
       sessionStorage.setItem("najda-admin-token", result.accessToken);
       setToken(result.accessToken);
@@ -99,7 +106,7 @@ export default function AdminDiscountsPage({ onBack, onLatex }: { onBack: () => 
           isActive: true,
         }),
       });
-      const created = await response.json() as DiscountCode;
+      const created = await readJson<DiscountCode>(response);
       setDiscounts((current) => [created, ...current]);
       setStatus("تم إنشاء كود الخصم بنجاح.");
       form.reset();
@@ -137,7 +144,7 @@ export default function AdminDiscountsPage({ onBack, onLatex }: { onBack: () => 
     <div className="discount-admin" dir="rtl">
       <aside>
         <div className="discount-admin-brand"><span>%</span><div><b>المنقذ الجامعي</b><small>لوحة الإدارة</small></div></div>
-        <nav><button className="active">أكواد الخصم</button><button onClick={onLatex}>مختبر LaTeX</button><button onClick={onBack}>العودة للموقع</button></nav>
+        <nav><button className="active">أكواد الخصم</button><button onClick={onRewards}>مراحل النقاط والهدايا</button><button onClick={onBack}>العودة للموقع</button></nav>
         <button className="discount-logout" onClick={() => { sessionStorage.removeItem("najda-admin-token"); setToken(""); }}>تسجيل الخروج</button>
       </aside>
       <main>

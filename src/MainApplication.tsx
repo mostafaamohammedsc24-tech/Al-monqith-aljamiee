@@ -1,11 +1,12 @@
 // @refresh reset
 import { FormEvent, lazy, ReactNode, Suspense, useEffect, useMemo, useState } from "react";
 import "./market-share.css";
+import FreeReportCover from "./FreeReportCover";
 import type { TemplateChoice } from "./TemplatesPage";
 
-const AdminLatexPage = lazy(() => import("./AdminLatexPage"));
 const TemplatesPage = lazy(() => import("./TemplatesPage"));
 const AdminDiscountsPage = lazy(() => import("./AdminDiscountsPage"));
+const AdminPointsPage = lazy(() => import("./AdminPointsPage"));
 const AdminPaymentsPage = lazy(() => import("./AdminPaymentsPage"));
 const AdminServicesPage = lazy(() => import("./AdminServicesPage"));
 
@@ -243,6 +244,7 @@ type MarketListing = {
   description: string;
   location: string;
   seller: string;
+  sellerPhone: string;
   createdAt: string;
   mediaUrl?: string;
 };
@@ -311,7 +313,7 @@ function MarketStorePage({
 
       <main className="store-main">
         <section className="store-hero">
-          <div><span>سوق من الطلبة وإلى الطلبة</span><h1>اكتشف مشاريع ومنتجات مجتمعك الجامعي</h1><p>طعام، أزياء، عناية، خدمات، أجهزة وأكثر — شراء آمن ودفع إلكتروني عبر Wayl.</p><div><button onClick={() => onPublish("منتج")}><Icon name="bag" size={18} /> بيع منتج</button><button onClick={() => onPublish("ريل")}><Icon name="play" size={18} /> انشر فيديو</button></div></div>
+          <div><span>سوق من الطلبة وإلى الطلبة</span><h1>اكتشف مشاريع ومنتجات مجتمعك الجامعي</h1><p>طعام، أزياء، عناية، خدمات، أجهزة وأكثر — تواصل مباشرة مع البائع عبر واتساب.</p><div><button onClick={() => onPublish("منتج")}><Icon name="bag" size={18} /> بيع منتج</button><button onClick={() => onPublish("ريل")}><Icon name="play" size={18} /> انشر فيديو</button></div></div>
           <span className="store-hero-art"><Icon name="store" size={76} /><i><Icon name="sparkles" size={25} /></i></span>
         </section>
 
@@ -359,7 +361,7 @@ function StoreProductCard({ item, onPurchase, onShare, onDetails }: { item: Mark
         <div className="store-slide seller"><span><Icon name="user" size={29} /><strong>{item.seller}</strong><small>{item.location}</small></span></div>
       </div>
       <div className="store-carousel-dots"><i /><i /><i /></div>
-      <div className="store-product-body"><span className="store-product-category">{item.kind} • {item.category}</span><button className="store-product-title" onClick={onDetails}><h3>{item.title}</h3><p>{item.description}</p></button><div><strong>{formatPrice(item.price)} <small>د.ع</small></strong><button onClick={onPurchase}>{item.kind === "خدمة" ? "اطلب الآن" : "اشترِ الآن"} <Icon name="arrow" size={15} /></button></div></div>
+      <div className="store-product-body"><span className="store-product-category">{item.kind} • {item.category}</span><button className="store-product-title" onClick={onDetails}><h3>{item.title}</h3><p>{item.description}</p></button><div><strong>{formatPrice(item.price)} <small>د.ع</small></strong><button onClick={onPurchase}>{item.kind === "خدمة" ? "اطلب الآن" : "تواصل مع البائع"} <Icon name="arrow" size={15} /></button></div></div>
     </article>
   );
 }
@@ -406,14 +408,29 @@ function ProfilePage({
   }, [profile]);
 
   const referralUrl = referralCode ? `${window.location.origin}/?ref=${referralCode}` : "";
-  const levels = [
-    { name: "برونزي", minimum: 0, className: "bronze" },
-    { name: "فضي", minimum: 200, className: "silver" },
-    { name: "ذهبي", minimum: 500, className: "gold" },
-    { name: "ماسي", minimum: 1000, className: "diamond" },
-  ];
-  const currentLevel = [...levels].reverse().find((level) => points >= level.minimum) || levels[0];
-  const nextLevel = levels.find((level) => level.minimum > points);
+  const [levels, setLevels] = useState([
+    { name: "برونزي", minimum: 0, perk: "الانضمام إلى برنامج الولاء", gift: "ترحيب خاص" },
+    { name: "نحاسي", minimum: 100, perk: "أولوية متابعة الطلب", gift: "شارة نحاسية" },
+    { name: "فضي", minimum: 500, perk: "مراجعة مجانية واحدة", gift: "شارة فضية" },
+    { name: "ذهبي", minimum: 1000, perk: "أولوية في الرد", gift: "هدية رقمية" },
+    { name: "بلاتيني", minimum: 2500, perk: "خصم خاص على الخدمات", gift: "قالب أكاديمي مجاني" },
+    { name: "زمردي", minimum: 5000, perk: "أولوية تنفيذ", gift: "حزمة قوالب" },
+    { name: "ماسي", minimum: 10000, perk: "مراجعتان مجانيتان", gift: "هدية أكاديمية" },
+    { name: "ياقوتي", minimum: 25000, perk: "خصم مميز على الخدمات", gift: "رصيد خدمة مجاني" },
+    { name: "سفير", minimum: 50000, perk: "دعم مباشر وأولوية قصوى", gift: "هدية مميزة من المنقذ" },
+    { name: "نخبة", minimum: 100000, perk: "مزايا حصرية للخدمات", gift: "رصيد خدمات خاص" },
+    { name: "متفوق", minimum: 250000, perk: "تنفيذ أولوية لجميع الطلبات", gift: "باقة خدمات مجانية" },
+    { name: "أسطوري", minimum: 500000, perk: "امتيازات مخصصة", gift: "هدية خاصة من المشرف" },
+    { name: "مليون", minimum: 1000000, perk: "كامل امتيازات البرنامج", gift: "الجائزة الكبرى" },
+  ]);
+  useEffect(() => {
+    fetch("/api/points/levels").then((response) => response.ok ? response.json() : null).then((result: { levels?: typeof levels } | null) => {
+      if (result?.levels?.length) setLevels(result.levels);
+    }).catch(() => {});
+  }, []);
+  const styledLevels = levels.map((level, index) => ({ ...level, className: ["bronze", "silver", "gold", "diamond"][index] || "diamond" }));
+  const currentLevel = [...styledLevels].reverse().find((level) => points >= level.minimum) || styledLevels[0];
+  const nextLevel = styledLevels.find((level) => level.minimum > points);
   const progressStart = currentLevel.minimum;
   const progressEnd = nextLevel?.minimum || currentLevel.minimum + 500;
   const progress = Math.min(100, ((points - progressStart) / Math.max(1, progressEnd - progressStart)) * 100);
@@ -460,6 +477,7 @@ function ProfilePage({
 
         <div className="profile-layout">
           <div className="profile-primary">
+            <FreeReportCover profile={profile} />
             <section className="daily-checkin-card">
               <div><span className="section-kicker">مكافأة يومية</span><h2>{dailyClaimed ? "تم تسجيل حضورك اليوم" : "سجّل حضورك اليومي"}</h2><p>{dailyClaimed ? "عد غداً لتحصل على نقاط جديدة وتحافظ على نشاط حسابك." : "زيارة بسيطة كل يوم تمنحك 15 نقطة تضاف مباشرة إلى رصيدك."}</p></div>
               <button className={dailyClaimed ? "claimed" : ""} disabled={dailyClaimed} onClick={onClaimDaily}><span><Icon name={dailyClaimed ? "check" : "star"} size={24} /></span><b>{dailyClaimed ? "تم الحضور" : "+15 نقطة"}</b><small>{dailyClaimed ? "مكتملة لليوم" : "اضغط للتسجيل"}</small></button>
@@ -469,7 +487,8 @@ function ProfilePage({
               <div className="profile-card-heading"><div><span>برنامج الولاء</span><h2>مستواي ونقاطي</h2></div><strong>{points}<small> نقطة</small></strong></div>
               <div className="profile-progress"><span style={{ width: `${progress}%` }} /></div>
               <div className="profile-progress-caption"><span>{currentLevel.name}</span><span>{nextLevel ? `${nextLevel.minimum - points} نقطة إلى ${nextLevel.name}` : "وصلت إلى أعلى مستوى"}</span></div>
-              <div className="profile-levels">{levels.map((level) => <div className={`${level.className} ${level.name === currentLevel.name ? "active" : ""}`} key={level.name}><i /><b>{level.name}</b><small>{level.minimum} نقطة</small></div>)}</div>
+              <div className="profile-levels">{styledLevels.map((level) => <div className={`${level.className} ${level.name === currentLevel.name ? "active" : ""}`} key={level.name} title={`${level.perk} | ${level.gift}`}><i /><b>{level.name}</b><small>{formatPrice(level.minimum)} نقطة</small></div>)}</div>
+              <p className="profile-tier-reward"><b>امتيازك:</b> {currentLevel.perk} <span>•</span> <b>هديتك:</b> {currentLevel.gift}</p>
               <p className="points-value"><Icon name="sparkles" size={15} /> كل 100 نقطة تمنحك خصم 1,000 د.ع عند طلب الخدمات.</p>
             </section>
 
@@ -517,7 +536,8 @@ type SavedOrder = {
   service: string;
   date: string;
   total: number;
-  status: "بانتظار التدقيق" | "بانتظار الدفع";
+  status: string;
+  phone?: string;
 };
 
 type StudentProfile = {
@@ -573,11 +593,11 @@ const serviceTemplates: Record<string, { name: string; style: string; descriptio
 
 const formatPrice = (value: number) => new Intl.NumberFormat("ar-IQ").format(value);
 
-type AppPage = "home" | "market" | "profile" | "templates" | "admin-login" | "admin-payments" | "admin-services" | "admin-latex" | "admin-discounts";
+type AppPage = "home" | "market" | "profile" | "templates" | "admin-login" | "admin-payments" | "admin-services" | "admin-discounts" | "admin-points";
 
 function pageFromPath(pathname: string): AppPage {
   if (pathname.startsWith("/admin/discounts")) return "admin-discounts";
-  if (pathname.startsWith("/admin/latex")) return "admin-latex";
+  if (pathname.startsWith("/admin/points")) return "admin-points";
   if (pathname.startsWith("/admin/payments")) return "admin-payments";
   if (pathname.startsWith("/admin/services")) return "admin-services";
   if (pathname.startsWith("/admin/login")) return "admin-login";
@@ -593,6 +613,10 @@ export default function App() {
   const [servicesLoadError, setServicesLoadError] = useState("");
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   const [orderStep, setOrderStep] = useState<"details" | "form" | "success">("details");
+  const [orderSubmitting, setOrderSubmitting] = useState(false);
+  const [orderError, setOrderError] = useState("");
+  const [lastOrderNumber, setLastOrderNumber] = useState("");
+  const [lastWhatsAppUrl, setLastWhatsAppUrl] = useState("");
   const [activeCategory, setActiveCategory] = useState("الكل");
   const [activeSection, setActiveSection] = useState("catalog");
   const [catalogQuery, setCatalogQuery] = useState("");
@@ -613,7 +637,7 @@ export default function App() {
     }
   });
   const accountStorageId = profile?.phone.replace(/\D/g, "") || "guest";
-  const [points, setPoints] = useState(() => Number(localStorage.getItem(`najda-points-${accountStorageId}`) || localStorage.getItem("najda-points") || 0));
+  const [points, setPoints] = useState(() => Math.max(0, Math.min(1000000, Number(localStorage.getItem(`najda-points-${accountStorageId}`) || localStorage.getItem("najda-points") || 0) || 0)));
   const [dailyClaimed, setDailyClaimed] = useState(
     () => localStorage.getItem(`najda-daily-claim-${accountStorageId}`) === new Date().toISOString().slice(0, 10),
   );
@@ -642,6 +666,10 @@ export default function App() {
       return [];
     }
   });
+
+  useEffect(() => {
+    localStorage.setItem("najda-orders", JSON.stringify(orders));
+  }, [orders]);
 
   useEffect(() => {
     let cancelled = false;
@@ -676,6 +704,23 @@ export default function App() {
       });
     return () => { cancelled = true; };
   }, []);
+
+  useEffect(() => {
+    if (page !== "market") return;
+    let cancelled = false;
+    fetch("/api/market/listings")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("تعذر تحميل إعلانات السوق.");
+        return response.json() as Promise<{ listings?: MarketListing[] }>;
+      })
+      .then((result) => {
+        if (!cancelled) setMarketListings(result.listings || []);
+      })
+      .catch((error: unknown) => {
+        if (!cancelled) setListingError(error instanceof Error ? error.message : "تعذر تحميل إعلانات السوق.");
+      });
+    return () => { cancelled = true; };
+  }, [page]);
 
   const serviceCategories = ["الكل", ...new Set(services.map((service) => service.category))];
   const catalogCategories = serviceCategories.slice(1).map((name) => ({
@@ -768,7 +813,7 @@ export default function App() {
 
   useEffect(() => {
     const savedPoints = localStorage.getItem(`najda-points-${accountStorageId}`);
-    if (savedPoints !== null) setPoints(Number(savedPoints));
+    if (savedPoints !== null) setPoints(Math.max(0, Math.min(1000000, Number(savedPoints) || 0)));
     setDailyClaimed(localStorage.getItem(`najda-daily-claim-${accountStorageId}`) === new Date().toISOString().slice(0, 10));
   }, [accountStorageId]);
 
@@ -845,6 +890,12 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
+  function navigateToAdminPoints() {
+    window.history.pushState({}, "", "/admin/points");
+    setPage("admin-points");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
   function navigateToAdminLogin() {
     window.history.pushState({}, "", "/admin/login");
     setAuthOpen(false);
@@ -860,12 +911,6 @@ export default function App() {
   function navigateToAdminServices() {
     window.history.pushState({}, "", "/admin/services");
     setPage("admin-services");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }
-
-  function navigateToAdminLatex() {
-    window.history.pushState({}, "", "/admin/latex");
-    setPage("admin-latex");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -1005,40 +1050,90 @@ export default function App() {
     document.body.style.overflow = "";
   }
 
-  function submitOrder(event: FormEvent<HTMLFormElement>) {
+  async function submitOrder(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selectedService) return;
-    const data = new FormData(event.currentTarget);
+    if (!selectedService || orderSubmitting) return;
+    const form = event.currentTarget;
+    const data = new FormData(form);
     const selectedSpeed = speedOptions.find((option) => option.id === speed);
-    const message = [
-      "مرحباً، أود تثبيت طلب جديد عبر المنقذ الجامعي",
-      `الخدمة: ${selectedService.title}`,
-      `الاسم الثلاثي: ${data.get("fullName")}`,
-      `رقم التواصل: ${data.get("phone")}`,
-      `الجامعة: ${data.get("university")}`,
-      `الكلية: ${data.get("college")}`,
-      `القسم: ${data.get("department")}`,
-      `الأستاذ المشرف: ${data.get("supervisor") || "غير محدد"}`,
-      `عنوان الموضوع: ${data.get("title")}`,
-      `ملاحظات الدكتور: ${data.get("notes") || "لا توجد"}`,
-      `مستوى التنفيذ: ${data.get("variant")}`,
-      `القالب: ${data.get("template")}`,
-      `اللون: ${data.get("color")}`,
-      `التنفيذ: ${selectedSpeed?.label} – ${selectedSpeed?.detail}`,
-      `كود الخصم: ${appliedCoupon?.code || "لا يوجد"}`,
-      `خصم النقاط: ${usePoints ? `${orderPrice.pointsDiscount} د.ع` : "لا يوجد"}`,
-      selectedService.showPrice ? `السعر التقديري: ${formatPrice(orderPrice.total)} د.ع` : "السعر النهائي يحدد بعد مراجعة تفاصيل الطلب.",
-      "الاستنساخ والتوصيل إلى الجامعة: مجاناً",
-      "",
-      "هذا استفسار عبر واتساب ولم يُسجل كطلب في النظام بعد.",
-    ].join("\n");
-    setOrderStep("success");
-    window.open(`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+    const whatsappWindow = window.open("about:blank", "_blank");
+    if (whatsappWindow) whatsappWindow.opener = null;
+    setOrderError("");
+    setOrderSubmitting(true);
+    try {
+      const response = await fetch("/api/orders/whatsapp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serviceId: String(selectedService.id),
+          serviceTitle: selectedService.title,
+          fullName: data.get("fullName"),
+          phone: data.get("phone"),
+          university: data.get("university"),
+          college: data.get("college"),
+          department: data.get("department"),
+          supervisor: data.get("supervisor"),
+          title: data.get("title"),
+          notes: data.get("notes"),
+          variant: data.get("variant"),
+          template: data.get("template"),
+          color: data.get("color"),
+          speed: selectedSpeed ? `${selectedSpeed.label} - ${selectedSpeed.detail}` : "اعتيادي",
+          discountCode: appliedCoupon?.code || "",
+          pointsDiscountIqd: orderPrice.pointsDiscount,
+          totalIqd: Math.round(orderPrice.total),
+        }),
+      });
+      const result = await response.json().catch(() => null) as { order?: { id: string; orderNumber: string; createdAt: string }; error?: string } | null;
+      if (!response.ok || !result?.order) throw new Error(result?.error || "تعذر حفظ الطلب. حاول مجدداً.");
+
+      const orderNumber = result.order.orderNumber;
+      const message = [
+        "مرحباً، أود استكمال الطلب المسجل عبر المنقذ الجامعي",
+        `رقم الطلب: ${orderNumber}`,
+        `الخدمة: ${selectedService.title}`,
+        `الاسم الثلاثي: ${data.get("fullName")}`,
+        `رقم التواصل: ${data.get("phone")}`,
+        `الجامعة: ${data.get("university")}`,
+        `الكلية: ${data.get("college")}`,
+        `القسم: ${data.get("department")}`,
+        `الأستاذ المشرف: ${data.get("supervisor") || "غير محدد"}`,
+        `عنوان الموضوع: ${data.get("title")}`,
+        `ملاحظات الدكتور: ${data.get("notes") || "لا توجد"}`,
+        `مستوى التنفيذ: ${data.get("variant") || "اعتيادي"}`,
+        `القالب: ${data.get("template") || "لا يحتاج قالباً"}`,
+        `اللون: ${data.get("color") || "غير محدد"}`,
+        `التنفيذ: ${selectedSpeed?.label} – ${selectedSpeed?.detail}`,
+        `كود الخصم: ${appliedCoupon?.code || "لا يوجد"}`,
+        `خصم النقاط: ${usePoints ? `${orderPrice.pointsDiscount} د.ع` : "لا يوجد"}`,
+        selectedService.showPrice ? `السعر التقديري: ${formatPrice(orderPrice.total)} د.ع` : "السعر النهائي يحدد بعد مراجعة تفاصيل الطلب.",
+        "الاستنساخ والتوصيل إلى الجامعة: مجاناً",
+      ].join("\n");
+      const whatsappUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(message)}`;
+      const savedOrder: SavedOrder = {
+        id: orderNumber,
+        service: selectedService.title,
+        date: new Date(result.order.createdAt).toLocaleDateString("ar-IQ"),
+        total: Math.round(orderPrice.total),
+        status: "تم حفظ الطلب وإحالته إلى واتساب",
+        phone: String(data.get("phone") || ""),
+      };
+      setOrders((current) => [savedOrder, ...current]);
+      setLastOrderNumber(orderNumber);
+      setLastWhatsAppUrl(whatsappUrl);
+      setOrderStep("success");
+      if (whatsappWindow) whatsappWindow.location.replace(whatsappUrl);
+    } catch (error) {
+      whatsappWindow?.close();
+      setOrderError(error instanceof Error ? error.message : "تعذر حفظ الطلب. حاول مجدداً.");
+    } finally {
+      setOrderSubmitting(false);
+    }
   }
 
   function claimDailyPoints() {
     if (dailyClaimed) return;
-    setPoints((current) => current + 15);
+    setPoints((current) => Math.min(1000000, current + 15));
     setDailyClaimed(true);
     localStorage.setItem(`najda-daily-claim-${accountStorageId}`, new Date().toISOString().slice(0, 10));
   }
@@ -1087,6 +1182,12 @@ export default function App() {
   }
 
   function openListingComposer(mode: "منتج" | "خدمة" | "ريل") {
+    if (!profile) {
+      setAuthMode("register");
+      setAuthError("أنشئ حساباً أولاً لنشر إعلان برقم واتساب المسجل.");
+      setAuthOpen(true);
+      return;
+    }
     setListingMode(mode);
     setListingError("");
     setListingError("");
@@ -1094,43 +1195,81 @@ export default function App() {
     setListingOpen(true);
   }
 
-  function submitListing(event: FormEvent<HTMLFormElement>) {
+  async function submitListing(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setListingError("نشر الإعلانات غير متاح حتى يكتمل ربط قاعدة بيانات السوق والتخزين.");
-  }
-
-  async function startWaylCheckout(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!purchaseItem || paymentLoading) return;
+    if (!profile) {
+      setListingError("سجّل الدخول قبل نشر الإعلان.");
+      return;
+    }
+    const form = event.currentTarget;
+    const data = new FormData(form);
+    const media = data.get("media");
+    if (!(media instanceof File) || !media.size) {
+      setListingError("اختر صورة أو فيديو للإعلان.");
+      return;
+    }
+    if (media.size > 10 * 1024 * 1024) {
+      setListingError("يجب ألا يتجاوز حجم الصورة أو الفيديو 10 ميغابايت.");
+      return;
+    }
+    setListingError("");
     setPaymentLoading(true);
-    setPaymentError("");
-    const form = new FormData(event.currentTarget);
-    const endpoint = import.meta.env.VITE_WAYL_CHECKOUT_ENDPOINT || "/api/payments/wayl/checkout";
-
     try {
-      const response = await fetch(endpoint, {
+      const mediaData = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => typeof reader.result === "string" ? resolve(reader.result) : reject(new Error("تعذرت قراءة الملف."));
+        reader.onerror = () => reject(new Error("تعذرت قراءة الملف."));
+        reader.readAsDataURL(media);
+      });
+      const response = await fetch("/api/market/listings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          listingId: purchaseItem.id,
-          customer: {
-            fullName: form.get("fullName"),
-            phone: form.get("phone"),
-            delivery: form.get("delivery"),
-          },
-          returnUrl: `${window.location.origin}/market?payment=return`,
+          title: data.get("title"),
+          category: data.get("category"),
+          price: Number(data.get("price")),
+          kind: data.get("kind"),
+          condition: data.get("condition"),
+          pricingUnit: data.get("pricingUnit"),
+          location: data.get("location"),
+          description: data.get("description"),
+          seller: profile.fullName,
+          sellerPhone: profile.phone,
+          media: { type: media.type, data: mediaData },
         }),
       });
-      if (!response.ok) throw new Error("تعذر إنشاء عملية الدفع");
-      const result = await response.json() as { checkoutUrl?: string };
-      if (!result.checkoutUrl) throw new Error("لم يُرجع الخادم رابط الدفع");
-      const checkoutUrl = new URL(result.checkoutUrl);
-      if (checkoutUrl.protocol !== "https:") throw new Error("رابط الدفع غير آمن");
-      window.location.assign(checkoutUrl.toString());
-    } catch {
-      setPaymentError("بوابة Wayl غير متصلة بالخادم بعد. لن يتم خصم أي مبلغ. أكمل إعداد endpoint الدفع حسب ملف fortheai.md.");
+      const result = await response.json().catch(() => null) as { listing?: MarketListing; error?: string } | null;
+      if (!response.ok || !result?.listing) throw new Error(result?.error || "تعذر حفظ الإعلان.");
+      setMarketListings((current) => [result.listing!, ...current]);
+      setListingOpen(false);
+      navigateToMarket();
+    } catch (error) {
+      setListingError(error instanceof Error ? error.message : "تعذر نشر الإعلان.");
+    } finally {
       setPaymentLoading(false);
     }
+  }
+
+  function contactMarketplaceSeller(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!purchaseItem) return;
+    const form = new FormData(event.currentTarget);
+    const phone = purchaseItem.sellerPhone.replace(/\D/g, "");
+    if (!/^9647\d{9}$/.test(phone)) {
+      setPaymentError("رقم واتساب البائع غير صالح.");
+      return;
+    }
+    const message = [
+      `مرحباً ${purchaseItem.seller}، أرغب بشراء إعلانك من سوق الجامعة:`,
+      `المنتج/الخدمة: ${purchaseItem.title}`,
+      `السعر: ${formatPrice(purchaseItem.price)} د.ع`,
+      `الاسم: ${form.get("fullName")}`,
+      `رقم التواصل: ${form.get("phone")}`,
+      `مكان الاستلام أو التفاصيل: ${form.get("delivery")}`,
+      `رابط الإعلان: ${getProductShareUrl(purchaseItem)}`,
+    ].join("\n");
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, "_blank", "noopener,noreferrer");
+    setPurchaseItem(null);
   }
 
   return (
@@ -1168,19 +1307,19 @@ export default function App() {
         </Suspense>
       ) : page === "admin-services" ? (
         <Suspense fallback={<div className="route-loader" role="status"><span /><strong>جارٍ تحميل إدارة الخدمات...</strong></div>}>
-          <AdminServicesPage onBack={navigateHome} onPayments={navigateToAdminDashboard} onDiscounts={navigateToAdminDiscounts} onLatex={navigateToAdminLatex} />
+          <AdminServicesPage onBack={navigateHome} onPayments={navigateToAdminDashboard} onDiscounts={navigateToAdminDiscounts} />
         </Suspense>
       ) : page === "admin-login" || page === "admin-payments" ? (
         <Suspense fallback={<div className="route-loader" role="status"><span /><strong>جارٍ تحميل لوحة المشرف...</strong></div>}>
-          <AdminPaymentsPage onBack={navigateHome} onDashboard={navigateToAdminDashboard} onServices={navigateToAdminServices} onDiscounts={navigateToAdminDiscounts} onLatex={navigateToAdminLatex} />
+          <AdminPaymentsPage onBack={navigateHome} onDashboard={navigateToAdminDashboard} onServices={navigateToAdminServices} onDiscounts={navigateToAdminDiscounts} />
+        </Suspense>
+      ) : page === "admin-points" ? (
+        <Suspense fallback={<div className="route-loader" role="status"><span /><strong>جارٍ تحميل مراحل النقاط...</strong></div>}>
+          <AdminPointsPage onDiscounts={navigateToAdminDiscounts} />
         </Suspense>
       ) : page === "admin-discounts" ? (
         <Suspense fallback={<div className="route-loader" role="status"><span /><strong>جارٍ تحميل إدارة الخصومات...</strong></div>}>
-          <AdminDiscountsPage onBack={navigateHome} onLatex={navigateToAdminLatex} />
-        </Suspense>
-      ) : page === "admin-latex" ? (
-        <Suspense fallback={<div className="route-loader" role="status"><span /><strong>جارٍ تحميل مختبر LaTeX...</strong><small>يتم تحميل أدوات الإدارة عند الحاجة فقط</small></div>}>
-          <AdminLatexPage onBack={navigateHome} onDiscounts={navigateToAdminDiscounts} />
+          <AdminDiscountsPage onBack={navigateHome} onRewards={navigateToAdminPoints} />
         </Suspense>
       ) : (
       <>
@@ -1389,7 +1528,7 @@ export default function App() {
         <section className="section" id="market">
           <div className="mx-auto max-w-[1180px] px-5 lg:px-8">
             <div className="market-banner">
-              <div><span className="section-kicker light">سوق الجامعة ومشاريع الطلبة</span><h2>كل مشروع طلابي يستحق أن يُرى</h2><p>سوق عام لمشاريع الطلبة: طعام، مكياج، أزياء، حرف، خدمات رقمية، كتب وأجهزة وأكثر. انشر منتجك أو خدمتك أو ريل قصير، ورسومنا 1,000 د.ع فقط عند نجاح البيع.</p><div className="flex flex-wrap gap-2"><button className="market-button" onClick={navigateToMarket}>دخول السوق <Icon name="arrow" size={18} /></button><button className="market-button outline" onClick={() => openListingComposer("منتج")}><Icon name="plus" size={18} /> بيع منتج</button><button className="market-button outline" onClick={() => openListingComposer("ريل")}><Icon name="play" size={18} /> انشر ريل</button></div></div>
+              <div><span className="section-kicker light">سوق الجامعة ومشاريع الطلبة</span><h2>كل مشروع طلابي يستحق أن يُرى</h2><p>سوق عام لمشاريع الطلبة: طعام، مكياج، أزياء، حرف، خدمات رقمية، كتب وأجهزة وأكثر. انشر منتجك أو خدمتك أو ريل قصير وتواصل مباشرة مع المشترين.</p><div className="flex flex-wrap gap-2"><button className="market-button" onClick={navigateToMarket}>دخول السوق <Icon name="arrow" size={18} /></button><button className="market-button outline" onClick={() => openListingComposer("منتج")}><Icon name="plus" size={18} /> بيع منتج</button><button className="market-button outline" onClick={() => openListingComposer("ريل")}><Icon name="play" size={18} /> انشر ريل</button></div></div>
               <div className="market-graphic"><Icon name="store" size={82} /><span className="market-bag"><Icon name="bag" size={30} /></span></div>
             </div>
             <div className="market-tools">
@@ -1548,13 +1687,14 @@ export default function App() {
                     <div className="summary-total"><span>{selectedService.showPrice ? "السعر التقديري" : "السعر"}</span><strong>{selectedService.showPrice ? <>{formatPrice(orderPrice.total)} <i>د.ع</i></> : "يحدد بعد المراجعة"}</strong></div>
                     <p><Icon name="bag" size={15} /> يشمل الاستنساخ والتوصيل المجاني إلى جامعتك</p>
                   </div>
-                  <button className="full-button full" type="submit">إرسال الطلب للمراجعة <Icon name="arrow" size={18} /></button>
-                  <p className="form-note full"><Icon name="phone" size={15} /> ستُفتح رسالة واتساب جاهزة بكل التفاصيل. أرسل ملفاتك هناك لتثبيت الطلب.</p>
+                  {orderError && <p className="payment-error full" role="alert">{orderError}</p>}
+                  <button className="full-button full" disabled={orderSubmitting} type="submit">{orderSubmitting ? "جارٍ حفظ الطلب..." : "حفظ الطلب والمتابعة إلى واتساب"} <Icon name="arrow" size={18} /></button>
+                  <p className="form-note full"><Icon name="phone" size={15} /> سيُحفظ طلبك أولاً، ثم نفتح واتساب لاستكمال التفاصيل والمعاملة.</p>
                 </div>
               </form>
             )}
             {orderStep === "success" && (
-              <div className="success-state"><span><Icon name="check" size={38} /></span><h2>تم فتح واتساب لإرسال الاستفسار</h2><p>لم يُسجل هذا كطلب داخل النظام. أرسل التفاصيل للفريق عبر واتساب للمتابعة.</p><div className="success-actions"><button className="full-button" onClick={closeService}>العودة إلى الخدمات</button><button className="outline-button" onClick={() => { closeService(); setShowOrders(true); }}>عرض طلباتي</button></div></div>
+              <div className="success-state"><span><Icon name="check" size={38} /></span><h2>تم حفظ طلبك وإحالتك إلى واتساب</h2><p>رقم طلبك <b>{lastOrderNumber}</b>. ستستكمل تفاصيل المعاملة مع فريق المنقذ الجامعي عبر واتساب، ويمكنك متابعة تسجيل الطلب من «طلباتي».</p><div className="success-actions"><button className="full-button" onClick={() => window.open(lastWhatsAppUrl, "_blank", "noopener,noreferrer")}>فتح واتساب لاستكمال الطلب</button><button className="outline-button" onClick={() => { closeService(); setShowOrders(true); }}>عرض طلباتي</button></div></div>
             )}
           </div>
         </div>
@@ -1627,7 +1767,7 @@ export default function App() {
         <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setShowOrders(false)}>
           <div className="service-modal compact-modal">
             <button className="modal-close" onClick={() => setShowOrders(false)} aria-label="إغلاق"><Icon name="close" size={20} /></button>
-            <div className="panel-heading"><span className="service-icon mint"><Icon name="receipt" size={24} /></span><div><span className="section-kicker">مركز المتابعة</span><h2>طلباتي</h2><p>تابع التدقيق والدفع والاستلام من مكان واحد.</p></div></div>
+            <div className="panel-heading"><span className="service-icon mint"><Icon name="receipt" size={24} /></span><div><span className="section-kicker">مركز المتابعة</span><h2>طلباتي</h2><p>طلباتك المحفوظة وحالتها؛ الطلبات المحالة تستكمل عبر واتساب.</p></div></div>
             <div className="modal-body">
               {orders.length === 0 ? (
                 <div className="empty-state"><Icon name="file" size={35} /><h3>لا توجد طلبات بعد</h3><p>اختر إحدى الخدمات وأكمل الاستمارة، وسيظهر طلبك هنا تلقائياً.</p><button className="full-button" onClick={() => setShowOrders(false)}>استكشف الخدمات</button></div>
@@ -1640,8 +1780,8 @@ export default function App() {
                       <strong>{formatPrice(order.total)} <i>د.ع</i></strong>
                     </article>
                   ))}
-                  <div className="order-steps"><span className="done"><i><Icon name="check" size={12} /></i>استلام الطلب</span><span className="current"><i>2</i>تدقيق التفاصيل</span><span><i>3</i>الدفع والتأكيد</span><span><i>4</i>التسليم</span></div>
-                  <p className="panel-note"><Icon name="phone" size={15} /> يتم تأكيد الدفع وإرسال الملفات النهائية من خلال واتساب.</p>
+                  <div className="order-steps"><span className="done"><i><Icon name="check" size={12} /></i>حفظ الطلب</span><span className="current"><i>2</i>استكمال عبر واتساب</span><span><i>3</i>تأكيد التفاصيل والدفع</span><span><i>4</i>التسليم</span></div>
+                  <p className="panel-note"><Icon name="phone" size={15} /> عند إتمام الإرسال، يظهر رقم الطلب وحالة إحالته إلى واتساب في حسابك.</p>
                 </div>
               )}
             </div>
@@ -1671,7 +1811,7 @@ export default function App() {
                   <label className="field"><span>مكان التوفر *</span><input name="location" defaultValue={profile?.university} required placeholder="الجامعة أو عن بُعد" /></label>
                   <label className="field full"><span>وصف واضح *</span><textarea name="description" required rows={3} placeholder="اذكر التفاصيل، ما يشمله السعر، والحالة أو الخبرة..." /></label>
                   <label className="upload-field full"><input name="media" required type="file" accept={listingMode === "ريل" ? "video/*" : "image/*,video/*"} onChange={(event) => setListingMediaName(event.target.files?.[0]?.name || "")} /><Icon name={listingMode === "ريل" ? "play" : "plus"} size={23} /><span><b>{listingMediaName || (listingMode === "ريل" ? "اختر فيديو أو ريل" : "أضف صوراً أو فيديو")}</b><small>{listingMode === "ريل" ? "يدعم الفيديوهات القصيرة والطويلة؛ سيُرفع الملف إلى التخزين السحابي بعد ربطه" : "يمكنك رفع فيديو طويل لشرح المنتج أو المشروع بالكامل"}</small></span></label>
-                  <div className="fee-note full"><Icon name="shield" size={18} /><span><b>النشر مجاني بالكامل</b><small>تُخصم رسوم 1,000 د.ع فقط بعد نجاح بيع كل قطعة.</small></span></div>
+                  <div className="fee-note full"><Icon name="shield" size={18} /><span><b>النشر مجاني بالكامل</b><small>يتواصل المشتري معك مباشرة عبر واتساب.</small></span></div>
                   {listingError && <p className="payment-error full" role="alert">{listingError}</p>}
                   <button className="full-button full" type="submit">{listingMode === "ريل" ? "نشر الريل" : "نشر الإعلان"}</button>
                 </div>
@@ -1701,7 +1841,7 @@ export default function App() {
               <div className="product-detail-seller"><span><Icon name="user" size={20} /></span><div><b>{productDetail.seller}</b><small>{productDetail.location} • نُشر {productDetail.createdAt}</small></div></div>
               <div className="product-detail-price"><span><small>السعر</small><strong>{formatPrice(productDetail.price)} <i>د.ع</i></strong></span><em>{productDetail.tag}</em></div>
               <div className="product-detail-actions">
-                <button className="product-buy" onClick={() => { setPurchaseItem(productDetail); setPaymentError(""); }}>{productDetail.kind === "خدمة" ? "اطلب الخدمة" : "الدفع عبر Wayl"} <Icon name="arrow" size={17} /></button>
+                <button className="product-buy" onClick={() => { setPurchaseItem(productDetail); setPaymentError(""); }}>{productDetail.kind === "خدمة" ? "اطلب الخدمة" : "تواصل مع البائع"} <Icon name="arrow" size={17} /></button>
                 <button className="product-share" onClick={() => openShareDialog(productDetail)}><Icon name="share" size={17} /> مشاركة</button>
               </div>
               <div className="product-public-link"><Icon name="file" size={14} /><span>{getProductShareUrl(productDetail)}</span></div>
@@ -1739,16 +1879,15 @@ export default function App() {
         <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setPurchaseItem(null)}>
           <div className="service-modal compact-modal">
             <button className="modal-close" onClick={() => setPurchaseItem(null)} aria-label="إغلاق"><Icon name="close" size={20} /></button>
-            <form onSubmit={startWaylCheckout}>
-              <div className="panel-heading"><span className="service-icon blue"><Icon name={purchaseItem.kind === "خدمة" ? "sparkles" : "cart"} size={24} /></span><div><span className="section-kicker">{purchaseItem.kind === "خدمة" ? "طلب خدمة طلابية" : "شراء آمن"}</span><h2>{purchaseItem.title}</h2><p>المبلغ: {formatPrice(purchaseItem.price)} د.ع</p></div></div>
+            <form onSubmit={contactMarketplaceSeller}>
+              <div className="panel-heading"><span className="service-icon blue"><Icon name={purchaseItem.kind === "خدمة" ? "sparkles" : "cart"} size={24} /></span><div><span className="section-kicker">{purchaseItem.kind === "خدمة" ? "طلب خدمة طلابية" : `تواصل مع ${purchaseItem.seller}`}</span><h2>{purchaseItem.title}</h2><p>السعر المعروض: {formatPrice(purchaseItem.price)} د.ع</p></div></div>
               <div className="modal-body form-grid">
                 <label className="field"><span>الاسم الثلاثي *</span><input name="fullName" defaultValue={profile?.fullName} required placeholder="اسم المستلم" /></label>
                 <label className="field"><span>رقم التواصل *</span><input name="phone" defaultValue={profile?.phone} required inputMode="tel" placeholder="07XX XXX XXXX" /></label>
                 <label className="field full"><span>{purchaseItem.kind === "خدمة" ? "الجامعة وطريقة الاستفادة" : "الجامعة ومكان الاستلام"} *</span><input name="delivery" required placeholder={purchaseItem.kind === "خدمة" ? "الجامعة، التخصص، حضوري أو عن بُعد" : "الجامعة، الكلية، أقرب نقطة"} /></label>
-                <div className="wayl-payment full"><span className="wayl-logo">W</span><div><b>الدفع الإلكتروني عبر Wayl</b><small>ستنتقل إلى صفحة Wayl الآمنة لإتمام الدفع، ولن تُحفظ بيانات بطاقتك لدينا.</small></div><strong>{formatPrice(purchaseItem.price)} د.ع</strong></div>
-                <div className="fee-note full"><Icon name="shield" size={19} /><span><b>لن نصدر وصلاً قبل تأكيد Wayl</b><small>يؤكد الخادم عملية الدفع أولاً ثم يصدر الوصل ويحدّث الطلب تلقائيًا.</small></span></div>
+                <div className="fee-note full"><Icon name="phone" size={19} /><span><b>إرسال الطلب إلى واتساب البائع</b><small>ستُفتح محادثة برقم البائع المسجل ورسالة تتضمن بيانات المنتج ووسيلة التواصل.</small></span></div>
                 {paymentError && <p className="payment-error full">{paymentError}</p>}
-                <button className="full-button wayl-button full" disabled={paymentLoading} type="submit">{paymentLoading ? "جارٍ فتح Wayl..." : "الدفع الآن عبر Wayl"} <Icon name="arrow" size={17} /></button>
+                <button className="full-button full" type="submit">فتح واتساب البائع <Icon name="arrow" size={17} /></button>
               </div>
             </form>
           </div>

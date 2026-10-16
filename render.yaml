@@ -14,18 +14,8 @@ services:
         value: 24.21.0
       - key: NODE_ENV
         value: production
-      - key: WOOCOMMERCE_BASE_URL
-        sync: false
-      - key: WOOCOMMERCE_CONSUMER_KEY
-        sync: false
-      - key: WOOCOMMERCE_CONSUMER_SECRET
-        sync: false
-      - key: WOOCOMMERCE_WAYL_GATEWAY_ID
-        sync: false
-      - key: WOOCOMMERCE_PRODUCT_MAP
-        sync: false
-      - key: WOOCOMMERCE_WEBHOOK_SECRET
-        sync: false
+      - key: SERVICE_STORE_DIR
+        value: /var/data
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
