@@ -174,7 +174,7 @@ async function updateServiceStore(update) {
   const operation = serviceWriteQueue.then(async () => {
     const services = await readServiceStore();
     const result = await update(services);
-    await writeServiceStore(services);
+    await writeServiceStoreToPath(serviceStorePath, services);
     return result;
   });
   serviceWriteQueue = operation.catch(() => {});
@@ -327,6 +327,25 @@ app.patch("/api/admin/services/:serviceId", adminActionLimiter, requireAdmin, ex
     return response.json({ service });
   } catch {
     return response.status(503).json({ error: "تعذر تعديل الخدمة في التخزين الدائم." });
+  }
+});
+
+app.delete("/api/admin/services/:serviceId", adminActionLimiter, requireAdmin, async (request, response) => {
+  const { serviceId } = request.params;
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(serviceId)) {
+    return response.status(400).json({ error: "معرّف الخدمة غير صالح." });
+  }
+  try {
+    const removed = await updateServiceStore((services) => {
+      const index = services.findIndex((service) => service.id === serviceId);
+      if (index < 0) return false;
+      services.splice(index, 1);
+      return true;
+    });
+    if (!removed) return response.status(404).json({ error: "الخدمة غير موجودة." });
+    return response.status(204).end();
+  } catch {
+    return response.status(503).json({ error: "تعذر حذف الخدمة من التخزين الدائم." });
   }
 });
 
